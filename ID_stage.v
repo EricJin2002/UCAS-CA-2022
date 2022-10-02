@@ -309,8 +309,8 @@ assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (id_pc + br_off
 //BR_BUS = {BR_target,BR_taken,BR_taken_cancel}
 assign BR_BUS = {br_target,br_taken,br_taken_cancel};
 
-//ID_to_EXE_BUS = {id_pc,gr_we,dest,data_sum,mem_en,mem_we,aluop,alusrc1,alusrc2,loadop,rfrom_mem}
-assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,mem_we,alu_op,alu_src1,alu_src2,load_op,rfrom_mem};
+//ID_to_EXE_BUS = {id_pc,gr_we,dest,data_sum,mem_en,mem_we,aluop,alusrc1,alusrc2,loadop,rfrom_me,mul_div_op}
+assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,mem_we,alu_op,alu_src1,alu_src2,load_op,rfrom_mem,mul_div_op};
 
 
 // ready go

@@ -58,7 +58,8 @@ wire [31: 0] alu_src1;
 wire [31: 0] alu_src2;
 wire [ 3: 0] load_op;
 wire         rfrom_mem;
-assign {exe_pc,gr_we,dest,mem_sum,mem_en,mem_we,alu_op,alu_src1,alu_src2,load_op,rfrom_mem} = ID_to_EXE_BUS_temp;
+wire [ 6: 0] mul_div_op;
+assign {exe_pc,gr_we,dest,mem_sum,mem_en,mem_we,alu_op,alu_src1,alu_src2,load_op,rfrom_mem,mul_div_op} = ID_to_EXE_BUS_temp;
 
 
 wire [31: 0] alu_result;

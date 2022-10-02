@@ -1,6 +1,6 @@
 `define BR_BUS_LEN 34
 `define IF_to_ID_LEN 64
-`define ID_to_EXE_LEN 156
+`define ID_to_EXE_LEN 163
 `define RF_BUS_LEN 38
 `define EXE_to_MEM_LEN 112
 `define MEM_to_WB_LEN 107

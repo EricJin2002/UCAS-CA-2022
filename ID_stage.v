@@ -79,6 +79,7 @@ wire        rfrom_mem;
 wire        store_op;
 wire        src1_is_pc;//check alu src1 PC bl/jrl
 wire        src2_is_imm;
+wire        src2_is_5_bit;
 wire        dst_is_r1;
 wire        gr_we;
 wire        mem_en;
@@ -273,6 +274,10 @@ assign src2_is_imm   = inst_slli_w      |
                        inst_jirl        |
                        inst_bl          ;
 
+assign src2_is_5_bit=  inst_sll         |
+                       inst_srl         |
+                       inst_sra         ;
+
 assign load_op       = {4{inst_ld_w}};
 assign rfrom_mem     = inst_ld_w;
 assign store_op      = inst_st_w;
@@ -295,7 +300,7 @@ assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
 
 
 assign alu_src1 = src1_is_pc  ? id_pc[31:0] : rj_value;
-assign alu_src2 = src2_is_imm ? imm : rkd_value;
+assign alu_src2 = src2_is_imm ? imm : (src2_is_5_bit ? {{27{1'b0}},rkd_value[4:0]} : rkd_value);
 
 assign rj_eq_rd = (rj_value == rkd_value);
 assign br_taken = (   inst_beq  &&  rj_eq_rd

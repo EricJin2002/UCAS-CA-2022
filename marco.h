@@ -1,0 +1,10 @@
+`define BR_BUS_LEN 34
+`define IF_to_ID_LEN 64
+`define ID_to_EXE_LEN 156
+`define RF_BUS_LEN 38
+`define EXE_to_MEM_LEN 112
+`define MEM_to_WB_LEN 107
+`define EXE_RF_LEN 38
+`define MEM_RF_LEN 38
+`define WB_RF_LEN  3838
+`define DEST_LEN 5

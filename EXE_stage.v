@@ -59,6 +59,7 @@ wire [ 3: 0] load_op;
 wire         rfrom_mem;
 wire [ 6: 0] mul_div_op;
 assign {exe_pc,gr_we,dest,mem_sum,mem_en,mem_we,alu_op,alu_src1,alu_src2,load_op,rfrom_mem,mul_div_op} = ID_to_EXE_BUS_temp;
+//mul_div_op = {inst_mul_w,inst_mulh_w,inst_mulh_wu,inst_div_w,inst_mod_w,inst_div_wu,inst_mod_wu};
 
 
 wire [31: 0] alu_result;
@@ -86,12 +87,15 @@ div_gen_signed u_div_gen_signed(
     .m_axis_dout_tvalid     (div_dout_valid_signed)
 );
 
+wire [6:0] ID_to_EXE_mul_div_op;
+assign ID_to_EXE_mul_div_op = ID_to_EXE_BUS[6:0];
+
 always @(posedge clk)begin
     if(~resetn)begin
         div_valid_signed <= 1'b0;
-    end else if (ID_to_EXE_valid && EXE_allowin)
-        div_valid_signed <= mul_div_op[3] || mul_div_op[4];
-    else if(div_divisor_ready_signed && div_dividend_ready_signed)begin
+    end else if (ID_to_EXE_valid && EXE_allowin) begin
+        div_valid_signed <= ID_to_EXE_mul_div_op[3] || ID_to_EXE_mul_div_op[2];
+    end else if(div_divisor_ready_signed && div_dividend_ready_signed)begin
         div_valid_signed <= 1'b0;
     end
 end
@@ -117,7 +121,7 @@ always @(posedge clk)begin
     if(~resetn)begin
         div_valid_unsigned <= 1'b0;
     end else if (ID_to_EXE_valid && EXE_allowin)
-        div_valid_unsigned <= mul_div_op[5] || mul_div_op[6];
+        div_valid_unsigned <= ID_to_EXE_mul_div_op[1] || ID_to_EXE_mul_div_op[0];
     else if(div_divisor_ready_unsigned && div_dividend_ready_unsigned)begin
         div_valid_unsigned <= 1'b0;
     end
@@ -127,21 +131,22 @@ end
 // assign unsigned_prod = alu_src1 * alu_src2;
 // assign signed_prod = $signed(alu_src1) * $signed(alu_src2);
 wire [65: 0] mul_result;
-wire         is_signed;
-assign is_signed = mul_div_op[1];
-assign mul_result = $signed({is_signed & alu_src1[31] ,alu_src1}) * $signed({is_signed & alu_src2[31], alu_src2});
+wire         mul_is_signed;
+assign mul_is_signed = mul_div_op[5];
+assign mul_result = $signed({mul_is_signed & alu_src1[31] ,alu_src1}) * $signed({mul_is_signed & alu_src2[31], alu_src2});
 
 wire [31: 0] exe_result;
-assign exe_result = {32{mul_div_op[0]}} & mul_result[31: 0]
-                   | {32{mul_div_op[1] || mul_div_op[2]}} & mul_result[63:32]
+assign exe_result = {32{mul_div_op[6]}} & mul_result[31: 0]
+                   | {32{mul_div_op[5] || mul_div_op[4]}} & mul_result[63:32]
                    | {32{mul_div_op[3]}} & div_result_signed[63:32]
-                   | {32{mul_div_op[4]}} & div_result_signed[31: 0]
-                   | {32{mul_div_op[5]}} & div_result_unsigned[63:32]
-                   | {32{mul_div_op[6]}} & div_result_unsigned[31: 0];
+                   | {32{mul_div_op[2]}} & div_result_signed[31: 0]
+                   | {32{mul_div_op[1]}} & div_result_unsigned[63:32]
+                   | {32{mul_div_op[0]}} & div_result_unsigned[31: 0]
+                   | {32{ ~|mul_div_op}} & alu_result;
 
-assign EXE_ready_go = (mul_div_op[3] || mul_div_op[4]) && div_dout_valid_signed 
-                   || (mul_div_op[5] || mul_div_op[6]) && div_dout_valid_unsigned
-                   || !(mul_div_op[3] || mul_div_op[4] || mul_div_op[5] || mul_div_op[6]);
+assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed 
+                   || (mul_div_op[1] || mul_div_op[0]) && div_dout_valid_unsigned
+                   || !(mul_div_op[3] || mul_div_op[2] || mul_div_op[1] || mul_div_op[0]);
 
 //{dest,op,aluresult}
 assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,exe_result};

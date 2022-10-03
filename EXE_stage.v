@@ -130,14 +130,30 @@ end
 // wire [63: 0] unsigned_prod, signed_prod;
 // assign unsigned_prod = alu_src1 * alu_src2;
 // assign signed_prod = $signed(alu_src1) * $signed(alu_src2);
-wire [65: 0] mul_result;
+
 wire         mul_is_signed;
 assign mul_is_signed = mul_div_op[5];
-assign mul_result = $signed({mul_is_signed & alu_src1[31] ,alu_src1}) * $signed({mul_is_signed & alu_src2[31], alu_src2});
+
+wire [65: 0] mul_result;
+assign mul_result = $signed({mul_is_signed & alu_src1[31], alu_src1}) * $signed({mul_is_signed & alu_src2[31], alu_src2});
+
+wire [67: 0] mul_result_1;
+mul u_mul_1(
+    .mul1   ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
+    .mul2   ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
+    .ans    (mul_result_1)
+);
+
+wire [67: 0] mul_result_2;
+booth_multiplier u_mul_2(
+    .x  ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
+    .y  ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
+    .z  (mul_result_2)
+);
 
 wire [31: 0] exe_result;
-assign exe_result = {32{mul_div_op[6]}} & mul_result[31: 0]
-                   | {32{mul_div_op[5] || mul_div_op[4]}} & mul_result[63:32]
+assign exe_result = {32{mul_div_op[6]}} & mul_result_1[31: 0]
+                   | {32{mul_div_op[5] || mul_div_op[4]}} & mul_result_1[63:32]
                    | {32{mul_div_op[3]}} & div_result_signed[63:32]
                    | {32{mul_div_op[2]}} & div_result_signed[31: 0]
                    | {32{mul_div_op[1]}} & div_result_unsigned[63:32]

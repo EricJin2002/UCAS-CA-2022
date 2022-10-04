@@ -75,7 +75,7 @@ module mul(
             addr addr16(.a(Ssum[ 15][i-1]),.b(Csum[ 14][i-1]),.cin(Csum[ 15][i-1]),.s(Ssum[16][i-1]),.cout(Csum[16][i]));
         end
     endgenerate
-    assign ans = (Ssum[16] + Csum[16] + Csum[16][0]);
+    assign ans = (Ssum[16] + Csum[16]);
 endmodule
 
 module addr(

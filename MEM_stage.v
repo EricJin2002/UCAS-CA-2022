@@ -50,13 +50,16 @@ wire [ 4: 0] dest       ;
 wire [31: 0] alu_result ;
 wire [31: 0] data_sum   ;
 wire         mem_en     ;
-wire [ 3: 0] mem_we     ;
-wire [ 3: 0] load_op    ;
+wire [ 4: 0] load_op    ;
 wire         rfrom_mem  ;
-assign {mem_pc,gr_we,dest,alu_result,data_sum,mem_en,mem_we,load_op,rfrom_mem} = EXE_to_MEM_BUS_temp;
+assign {mem_pc,gr_we,dest,alu_result,data_sum,mem_en,load_op,rfrom_mem} = EXE_to_MEM_BUS_temp;
 
+wire [31: 0] mem_result_shift;
 wire [31: 0] mem_result;
-assign mem_result      = data_sram_rdata;
+assign mem_result_shift = data_sram_rdata>>({3'b0, alu_result[1:0]}<<3);
+assign mem_result       = {32{load_op[`LD_B] || load_op[`LD_BU]}} & {{24{load_op[`LD_B] && mem_result_shift[7]}}, mem_result_shift[7:0]}
+                        | {32{load_op[`LD_H] || load_op[`LD_HU]}} & {{16{load_op[`LD_H] && mem_result_shift[15]}}, mem_result_shift[15:0]}
+                        | {32{load_op[`LD_W]}} & mem_result_shift;
 
 wire [31: 0] ms_final_result;
 assign ms_final_result = rfrom_mem ? mem_result : alu_result;
@@ -64,6 +67,6 @@ assign ms_final_result = rfrom_mem ? mem_result : alu_result;
 assign MEM_RF_BUS = {{`DEST_LEN{gr_we & MEM_valid}} & dest,rfrom_mem,ms_final_result};
 
 //MEM_to_WB_BUS = {mem_pc,gr_we,dest,memresult,aluresult,loadop,rfrom_mem}
-assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,mem_result,alu_result,load_op,rfrom_mem};
+assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,mem_result,alu_result,rfrom_mem};
 
 endmodule

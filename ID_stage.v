@@ -74,16 +74,15 @@ wire [11:0] alu_op;
 wire [6:0]  mul_div_op; 
 wire [31:0] alu_src1;
 wire [31:0] alu_src2;
-wire [ 3:0] load_op;
+wire [ 7:0] store_load_op;
 wire        rfrom_mem;
-wire        store_op;
 wire        src1_is_pc;//check alu src1 PC bl/jrl
 wire        src2_is_imm;
 wire        src2_is_5_bit;
 wire        dst_is_r1;
 wire        gr_we;
 wire        mem_en;
-wire [3: 0] mem_we;
+// wire [3: 0] mem_we;
 wire        src_reg_is_rd;
 wire        src_reg_is_rk;
 wire        src_reg_is_rkd;
@@ -134,7 +133,13 @@ wire        inst_srli_w;
 wire        inst_srai_w;
 wire        inst_addi_w;
 wire        inst_ld_w;
+wire        inst_ld_b;
+wire        inst_ld_h;
+wire        inst_ld_bu;
+wire        inst_ld_hu;
 wire        inst_st_w;
+wire        inst_st_b;
+wire        inst_st_h;
 wire        inst_jirl;
 wire        inst_b;
 wire        inst_bl;
@@ -204,7 +209,13 @@ assign inst_srl         = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1
 assign inst_sra         = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h10];
 assign inst_addi_w      = op_31_26_d[6'h00] & op_25_22_d[4'ha];
 assign inst_ld_w        = op_31_26_d[6'h0a] & op_25_22_d[4'h2];
+assign inst_ld_b        = op_31_26_d[6'h0a] & op_25_22_d[4'h0];
+assign inst_ld_h        = op_31_26_d[6'h0a] & op_25_22_d[4'h1];
+assign inst_ld_bu       = op_31_26_d[6'h0a] & op_25_22_d[4'h8];
+assign inst_ld_hu       = op_31_26_d[6'h0a] & op_25_22_d[4'h9];
 assign inst_st_w        = op_31_26_d[6'h0a] & op_25_22_d[4'h6];
+assign inst_st_b        = op_31_26_d[6'h0a] & op_25_22_d[4'h4];
+assign inst_st_h        = op_31_26_d[6'h0a] & op_25_22_d[4'h5];
 assign inst_jirl        = op_31_26_d[6'h13];
 assign inst_b           = op_31_26_d[6'h14];
 assign inst_bl          = op_31_26_d[6'h15];
@@ -224,7 +235,8 @@ assign inst_mod_w       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2
 assign inst_div_wu      = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h02];
 assign inst_mod_wu      = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h03];
 
-assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_st_w
+assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu
+                    | inst_st_w | inst_st_b | inst_st_h
                     | inst_jirl | inst_bl | inst_pcaddu12i;
 assign alu_op[ 1] = inst_sub_w;
 assign alu_op[ 2] = inst_slt | inst_slti;
@@ -244,7 +256,8 @@ assign need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
 assign need_ui12  =  inst_andi | inst_ori | inst_xori;    
 
 
-assign need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_sltui | inst_slti;
+assign need_si12  =  inst_addi_w | inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu
+                    | inst_st_w | inst_st_b | inst_st_h | inst_sltui | inst_slti;
 assign need_si16  =  inst_jirl | inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu;
 assign need_si20  =  inst_lu12i_w | inst_pcaddu12i;
 assign need_si26  =  inst_b | inst_bl;
@@ -257,7 +270,7 @@ assign imm = {32{src2_is_4}} & 32'h4                     |
              {32{need_ui12}} & {{20{1'b0}},i12[11:0]}
              ;
 
-assign src_reg_is_rd  = inst_beq   | inst_bne   | inst_st_w | inst_blt | inst_bge | inst_bltu | inst_bgeu;
+assign src_reg_is_rd  = inst_beq   | inst_bne   | inst_st_w | inst_st_b | inst_st_h | inst_blt | inst_bge | inst_bltu | inst_bgeu;
 assign src_reg_is_rk  = inst_add_w | inst_sub_w | inst_slt | inst_sltu | inst_and | inst_or | inst_nor | inst_xor | inst_sll | inst_srl | inst_sra | inst_mul_w | inst_mulh_w | inst_mulh_wu | inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;   
 assign src_reg_is_rj  = ~inst_b & ~inst_bl & ~inst_lu12i_w;
 assign src_reg_is_rkd = src_reg_is_rd | src_reg_is_rk;
@@ -276,7 +289,13 @@ assign src2_is_imm   = inst_slli_w      |
                        inst_ori         |
                        inst_xori        |
                        inst_ld_w        |
+                       inst_ld_b        |
+                       inst_ld_h        |
+                       inst_ld_bu       |
+                       inst_ld_hu       |
                        inst_st_w        |
+                       inst_st_b        |
+                       inst_st_h        |
                        inst_lu12i_w     |
                        inst_pcaddu12i   |
                        inst_jirl        |
@@ -286,13 +305,12 @@ assign src2_is_5_bit=  inst_sll         |
                        inst_srl         |
                        inst_sra         ;
 
-assign load_op       = {4{inst_ld_w}};
-assign rfrom_mem     = inst_ld_w;
-assign store_op      = inst_st_w;
+assign store_load_op = {inst_st_w, inst_st_b, inst_st_h, inst_ld_w, inst_ld_b, inst_ld_h, inst_ld_bu, inst_ld_hu};
+assign rfrom_mem     = inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu;
 assign dst_is_r1     = inst_bl;
-assign gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu;
-assign mem_en        = inst_st_w;
-assign mem_we        = {4{inst_st_w}};
+assign gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu;
+assign mem_en        = inst_st_w | inst_st_b | inst_st_h;
+// assign mem_we        = {4{inst_st_w}}; // todo: delete this
 assign dest          = dst_is_r1 ? 5'd1 : rd;
 
 
@@ -312,7 +330,9 @@ assign alu_src2 = src2_is_imm ? imm : (src2_is_5_bit ? {{27{1'b0}},rkd_value[4:0
 
 wire cmp_cout;
 wire [31:0] cmp_result;
-assign {cmp_cout,cmp_result} = rj_value + ~rkd_value + 1'b1;
+wire [31:0] not_rkd_value;
+assign not_rkd_value = ~rkd_value;
+assign {cmp_cout,cmp_result} = rj_value + not_rkd_value + 1'b1;
 assign rj_eq_rd = (rj_value == rkd_value);
 assign rj_lt_rd = (rj_value[31] & ~rkd_value[31]) | ((rj_value[31] ~^ rkd_value[31]) & cmp_result[31]);
 assign rj_lt_rd_u = ~cmp_cout;
@@ -332,7 +352,7 @@ assign br_target = (inst_beq || inst_bne || inst_bl || inst_b || inst_blt || ins
 assign BR_BUS = {br_target,br_taken,br_taken_cancel};
 
 //ID_to_EXE_BUS = {id_pc,gr_we,dest,data_sum,mem_en,mem_we,aluop,alusrc1,alusrc2,loadop,rfrom_me,mul_div_op}
-assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,mem_we,alu_op,alu_src1,alu_src2,load_op,rfrom_mem,mul_div_op};
+assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op};
 
 
 // ready go

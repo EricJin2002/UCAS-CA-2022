@@ -51,14 +51,13 @@ wire         gr_we;
 wire [ 4: 0] dest;
 wire [31: 0] mem_sum;
 wire         mem_en;
-wire [ 3: 0] mem_we;
 wire [11: 0] alu_op;
 wire [31: 0] alu_src1;
 wire [31: 0] alu_src2;
-wire [ 3: 0] load_op;
+wire [ 7: 0] store_load_op;
 wire         rfrom_mem;
 wire [ 6: 0] mul_div_op;
-assign {exe_pc,gr_we,dest,mem_sum,mem_en,mem_we,alu_op,alu_src1,alu_src2,load_op,rfrom_mem,mul_div_op} = ID_to_EXE_BUS_temp;
+assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op} = ID_to_EXE_BUS_temp;
 //mul_div_op = {inst_mul_w,inst_mulh_w,inst_mulh_wu,inst_div_w,inst_mod_w,inst_div_wu,inst_mod_wu};
 
 
@@ -137,23 +136,23 @@ assign mul_is_signed = mul_div_op[5];
 wire [65: 0] mul_result;
 assign mul_result = $signed({mul_is_signed & alu_src1[31], alu_src1}) * $signed({mul_is_signed & alu_src2[31], alu_src2});
 
-wire [67: 0] mul_result_1;
-mul u_mul_1(
-    .mul1   ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
-    .mul2   ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
-    .ans    (mul_result_1)
-);
-
-wire [67: 0] mul_result_2;
-booth_multiplier u_mul_2(
-    .x  ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
-    .y  ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
-    .z  (mul_result_2)
-);
+// wire [67: 0] mul_result_1;
+// mul u_mul_1(
+//     .mul1   ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
+//     .mul2   ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
+//     .ans    (mul_result_1)
+// );
+// 
+// wire [67: 0] mul_result_2;
+// booth_multiplier u_mul_2(
+//     .x  ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
+//     .y  ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
+//     .z  (mul_result_2)
+// );
 
 wire [31: 0] exe_result;
-assign exe_result = {32{mul_div_op[6]}} & mul_result_2[31: 0]
-                   | {32{mul_div_op[5] || mul_div_op[4]}} & mul_result_2[63:32]
+assign exe_result = {32{mul_div_op[6]}} & mul_result[31: 0]
+                   | {32{mul_div_op[5] || mul_div_op[4]}} & mul_result[63:32]
                    | {32{mul_div_op[3]}} & div_result_signed[63:32]
                    | {32{mul_div_op[2]}} & div_result_signed[31: 0]
                    | {32{mul_div_op[1]}} & div_result_unsigned[63:32]
@@ -168,9 +167,25 @@ assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed
 assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,exe_result};
 
 assign data_sram_en    = (rfrom_mem || mem_en) && EXE_valid;
-assign data_sram_we    = mem_we;
-assign data_sram_addr  = alu_result;
-assign data_sram_wdata = mem_sum;
+
+wire [3:0] mask;
+assign mask = {
+     alu_result[1] &  alu_result[0],
+     alu_result[1] & ~alu_result[0],
+    ~alu_result[1] &  alu_result[0],
+    ~alu_result[1] & ~alu_result[0]
+};
+
+assign data_sram_we    = {4{store_load_op[`ST_W]}} & 4'b1111
+                       | {4{store_load_op[`ST_H]}} & {{2{mask[2]}}, {2{mask[0]}}}
+                       | {4{store_load_op[`ST_B]}} & mask;
+assign data_sram_addr  = {alu_result[31:2], 2'b0};
+assign data_sram_wdata = {32{store_load_op[`ST_B]}} & {4{mem_sum[ 7:0]}} 
+                       | {32{store_load_op[`ST_H]}} & {2{mem_sum[15:0]}}
+                       | {32{store_load_op[`ST_W]}} & mem_sum[31:0];
+
+wire [4:0] load_op;
+assign load_op = store_load_op[4:0];
 //EXE_to_MEM_BUS = {exe_pc,gr_we,dest,alu_res,data_sum,mem_en,mem_we,loadop}
-assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,mem_we,load_op,rfrom_mem};
+assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem};
 endmodule

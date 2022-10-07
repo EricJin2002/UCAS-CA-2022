@@ -48,9 +48,8 @@ wire         gr_we;
 wire [ 4: 0] dest;
 wire [31: 0] mem_result;
 wire [31: 0] alu_result;
-wire [ 3: 0] load_op;
 wire         rfrom_mem;
-assign {wb_pc,gr_we,dest,mem_result,alu_result,load_op,rfrom_mem} = MEM_to_WB_BUS_temp;
+assign {wb_pc,gr_we,dest,mem_result,alu_result,rfrom_mem} = MEM_to_WB_BUS_temp;
 
  
 wire         rf_we   ;

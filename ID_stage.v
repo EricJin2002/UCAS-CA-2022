@@ -319,7 +319,7 @@ assign rj_lt_rd_u = ~cmp_cout;
 assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_bne  && !rj_eq_rd
                    || inst_blt  &&  rj_lt_rd
-                   || inst_bge  && !rj_gt_rd
+                   || inst_bge  && !rj_lt_rd
                    || inst_bltu &&  rj_lt_rd_u
                    || inst_bgeu && !rj_lt_rd_u
                    || inst_jirl

@@ -140,6 +140,10 @@ wire        inst_b;
 wire        inst_bl;
 wire        inst_beq;
 wire        inst_bne;
+wire        inst_blt;
+wire        inst_bge;
+wire        inst_bltu;
+wire        inst_bgeu;
 wire        inst_lu12i_w;
 wire        inst_pcaddu12i;
 wire        inst_mul_w;
@@ -206,6 +210,10 @@ assign inst_b           = op_31_26_d[6'h14];
 assign inst_bl          = op_31_26_d[6'h15];
 assign inst_beq         = op_31_26_d[6'h16];
 assign inst_bne         = op_31_26_d[6'h17];
+assign inst_blt         = op_31_26_d[6'h18];
+assign inst_bge         = op_31_26_d[6'h19];
+assign inst_bltu        = op_31_26_d[6'h1a];
+assign inst_bgeu        = op_31_26_d[6'h1b];
 assign inst_lu12i_w     = op_31_26_d[6'h05] & ~inst[25];
 assign inst_pcaddu12i   = op_31_26_d[6'h07] & ~inst[25];
 assign inst_mul_w       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h18];
@@ -237,7 +245,7 @@ assign need_ui12  =  inst_andi | inst_ori | inst_xori;
 
 
 assign need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_sltui | inst_slti;
-assign need_si16  =  inst_jirl | inst_beq | inst_bne;
+assign need_si16  =  inst_jirl | inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu;
 assign need_si20  =  inst_lu12i_w | inst_pcaddu12i;
 assign need_si26  =  inst_b | inst_bl;
 assign src2_is_4  =  inst_jirl | inst_bl;
@@ -249,7 +257,7 @@ assign imm = {32{src2_is_4}} & 32'h4                     |
              {32{need_ui12}} & {{20{1'b0}},i12[11:0]}
              ;
 
-assign src_reg_is_rd  = inst_beq   | inst_bne   | inst_st_w;
+assign src_reg_is_rd  = inst_beq   | inst_bne   | inst_st_w | inst_blt | inst_bge | inst_bltu | inst_bgeu;
 assign src_reg_is_rk  = inst_add_w | inst_sub_w | inst_slt | inst_sltu | inst_and | inst_or | inst_nor | inst_xor | inst_sll | inst_srl | inst_sra | inst_mul_w | inst_mulh_w | inst_mulh_wu | inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;   
 assign src_reg_is_rj  = ~inst_b & ~inst_bl & ~inst_lu12i_w;
 assign src_reg_is_rkd = src_reg_is_rd | src_reg_is_rk;
@@ -282,7 +290,7 @@ assign load_op       = {4{inst_ld_w}};
 assign rfrom_mem     = inst_ld_w;
 assign store_op      = inst_st_w;
 assign dst_is_r1     = inst_bl;
-assign gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b;
+assign gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu;
 assign mem_en        = inst_st_w;
 assign mem_we        = {4{inst_st_w}};
 assign dest          = dst_is_r1 ? 5'd1 : rd;
@@ -302,15 +310,24 @@ assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
 assign alu_src1 = src1_is_pc  ? id_pc[31:0] : rj_value;
 assign alu_src2 = src2_is_imm ? imm : (src2_is_5_bit ? {{27{1'b0}},rkd_value[4:0]} : rkd_value);
 
+wire cmp_cout;
+wire [31:0] cmp_result;
+assign {cmp_cout,cmp_result} = rj_value + ~rkd_value + 1'b1;
 assign rj_eq_rd = (rj_value == rkd_value);
+assign rj_lt_rd = (rj_value[31] & ~rkd_value[31]) | ((rj_value[31] ~^ rkd_value[31]) & cmp_result[31]);
+assign rj_lt_rd_u = ~cmp_cout;
 assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_bne  && !rj_eq_rd
+                   || inst_blt  &&  rj_lt_rd
+                   || inst_bge  && !rj_gt_rd
+                   || inst_bltu &&  rj_lt_rd_u
+                   || inst_bgeu && !rj_lt_rd_u
                    || inst_jirl
                    || inst_bl
                    || inst_b
                   ) && ID_valid;
-assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (id_pc + br_offs) :
-                                                   /*inst_jirl*/ (rj_value + jirl_offs);
+assign br_target = (inst_beq || inst_bne || inst_bl || inst_b || inst_blt || inst_bge || inst_bltu || inst_bgeu) ? (id_pc + br_offs) :
+                                                                                                /*inst_jirl*/ (rj_value + jirl_offs);
 //BR_BUS = {BR_target,BR_taken,BR_taken_cancel}
 assign BR_BUS = {br_target,br_taken,br_taken_cancel};
 

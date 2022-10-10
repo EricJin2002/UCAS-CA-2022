@@ -6,7 +6,7 @@
 `define MEM_to_WB_LEN 103
 `define EXE_RF_LEN 38
 `define MEM_RF_LEN 38
-`define WB_RF_LEN  3838
+`define WB_RF_LEN  38
 `define DEST_LEN 5
 
 `define ST_W 7

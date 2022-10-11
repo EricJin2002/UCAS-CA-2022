@@ -46,29 +46,26 @@ end
 wire [31: 0] wb_pc;
 wire         gr_we;
 wire [ 4: 0] dest;
-wire [31: 0] mem_result;
-wire [31: 0] alu_result;
+wire [31: 0] ws_final_result;
 wire         rfrom_mem;
-assign {wb_pc,gr_we,dest,mem_result,alu_result,rfrom_mem} = MEM_to_WB_BUS_temp;
+assign {wb_pc,gr_we,dest,ws_final_result,rfrom_mem} = MEM_to_WB_BUS_temp;
 
  
 wire         rf_we   ;
 wire [ 4: 0] rf_waddr;
 wire [31: 0] rf_wdata;
-wire [31: 0] ms_final_result;
-assign ms_final_result = rfrom_mem ? mem_result : alu_result;
 assign rf_we    = gr_we && WB_valid;
 assign rf_waddr = dest;
-assign rf_wdata = ms_final_result;
+assign rf_wdata = ws_final_result;
 assign RF_BUS = {rf_we,rf_waddr,rf_wdata};
 
 //{dest,op,final_result}
-assign WB_RF_BUS = {{`DEST_LEN{gr_we & WB_valid}} & dest,rfrom_mem,ms_final_result};
+assign WB_RF_BUS = {{`DEST_LEN{gr_we & WB_valid}} & dest,rfrom_mem,ws_final_result};
 
 // debug info generate
 assign debug_wb_pc       = wb_pc;
 assign debug_wb_rf_we    = {4{rf_we}};
 assign debug_wb_rf_wnum  = dest;
-assign debug_wb_rf_wdata = ms_final_result;
+assign debug_wb_rf_wdata = ws_final_result;
 
 endmodule

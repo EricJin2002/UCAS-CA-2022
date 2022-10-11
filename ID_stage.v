@@ -357,7 +357,7 @@ assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_sr
 
 // ready go
 wire [ 4: 0] EXE_dest;
-wire EXE_rfrom_mem;
+wire EXE_rfrom_mem_or_mul;
 wire [31: 0] EXE_alu_result;
 
 wire [ 4: 0] MEM_dest;
@@ -368,7 +368,7 @@ wire [ 4: 0] WB_dest ;
 wire WB_rfrom_mem;
 wire [31: 0] WB_result;
 
-assign {EXE_dest,EXE_rfrom_mem,EXE_alu_result} = EXE_RF_BUS;
+assign {EXE_dest,EXE_rfrom_mem_or_mul,EXE_alu_result} = EXE_RF_BUS;
 assign {MEM_dest,MEM_rfrom_mem,MEM_result    } = MEM_RF_BUS;
 assign {WB_dest ,WB_rfrom_mem ,WB_result     } = WB_RF_BUS ;
 
@@ -379,8 +379,8 @@ assign {WB_dest ,WB_rfrom_mem ,WB_result     } = WB_RF_BUS ;
 wire checkrj;
 wire checkrkd;
 
-assign checkrj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(rj ==EXE_dest && EXE_rfrom_mem) : 1;
-assign checkrkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(rkd==EXE_dest && EXE_rfrom_mem) : 1;
+assign checkrj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(rj ==EXE_dest && EXE_rfrom_mem_or_mul) : 1;
+assign checkrkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(rkd==EXE_dest && EXE_rfrom_mem_or_mul) : 1;
 assign ID_ready_go = checkrj && checkrkd;
 
 assign br_taken_cancel = br_taken & ID_ready_go;

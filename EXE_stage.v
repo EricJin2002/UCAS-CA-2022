@@ -136,35 +136,39 @@ assign mul_is_signed = mul_div_op[5];
 // wire [65: 0] mul_result;
 // assign mul_result = $signed({mul_is_signed & alu_src1[31], alu_src1}) * $signed({mul_is_signed & alu_src2[31], alu_src2});
 
-wire [67: 0] mul_result_1;
-mul u_mul_1(
-    .mul1   ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
-    .mul2   ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
-    .ans    (mul_result_1)
-);
-
-// wire [67: 0] mul_result_2;
-// booth_multiplier u_mul_2(
-//     .x  ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
-//     .y  ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
-//     .z  (mul_result_2)
+// wire [67: 0] mul_result_1;
+// mul u_mul_1(
+//     .mul1   ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
+//     .mul2   ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
+//     .ans    (mul_result_1)
 // );
 
+wire [67: 0] add1;
+wire [67: 0] add2;
+wire         cin;
+booth_multiplier u_mul_2(
+    .clk    (clk),
+    .x      ({{2{mul_is_signed & alu_src1[31]}}, alu_src1}),
+    .y      ({{2{mul_is_signed & alu_src2[31]}}, alu_src2}),
+    //.z      (mul_result_2),
+    .add1   (add1),
+    .add2   (add2),
+    .cin    (cin)
+);
+
 wire [31: 0] exe_result;
-assign exe_result = {32{mul_div_op[6]}} & mul_result_1[31: 0]
-                   | {32{mul_div_op[5] || mul_div_op[4]}} & mul_result_1[63:32]
-                   | {32{mul_div_op[3]}} & div_result_signed[63:32]
+assign exe_result =  {32{mul_div_op[3]}} & div_result_signed[63:32]
                    | {32{mul_div_op[2]}} & div_result_signed[31: 0]
                    | {32{mul_div_op[1]}} & div_result_unsigned[63:32]
                    | {32{mul_div_op[0]}} & div_result_unsigned[31: 0]
-                   | {32{ ~|mul_div_op}} & alu_result;
+                   | {32{ ~|mul_div_op[3:0]}} & alu_result;
 
 assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed 
                    || (mul_div_op[1] || mul_div_op[0]) && div_dout_valid_unsigned
                    || !(mul_div_op[3] || mul_div_op[2] || mul_div_op[1] || mul_div_op[0]);
 
 //{dest,op,aluresult}
-assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,exe_result};
+assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem||(|mul_div_op[6:4]),exe_result};
 
 assign data_sram_en    = (rfrom_mem || mem_en) && EXE_valid;
 
@@ -187,5 +191,5 @@ assign data_sram_wdata = {32{store_load_op[`ST_B]}} & {4{mem_sum[ 7:0]}}
 wire [4:0] load_op;
 assign load_op = store_load_op[4:0];
 //EXE_to_MEM_BUS = {exe_pc,gr_we,dest,alu_res,data_sum,mem_en,mem_we,loadop}
-assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem};
+assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,add1,add2,cin,mul_div_op};
 endmodule

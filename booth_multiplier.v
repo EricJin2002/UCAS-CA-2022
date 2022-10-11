@@ -21,9 +21,12 @@
 
 //booth乘法器顶层模块
 module booth_multiplier(
-    input  [33:0] x, //被乘数
-    input  [33:0] y, //乘数
-    output [67:0] z  //乘积
+    input          clk,
+    input   [33:0] x, //被乘数
+    input   [33:0] y, //乘数
+    output  [67:0] add1,
+    output  [67:0] add2,
+    output         cin
 );
 
 //生成部分积（partial product generator, ppg）
@@ -70,7 +73,10 @@ generate
 endgenerate
 
 //64位加法器
-assign z = {wt_c[66:0], ppg_c[15]} + wt_s[67:0] + ppg_c[16];
+// assign z = {wt_c[66:0], ppg_c[15]} + wt_s[67:0] + ppg_c[16];
+assign add1 = {wt_c[66:0], ppg_c[15]};
+assign add2 = wt_s[67:0];
+assign cin = ppg_c[16];
 
 endmodule
 
@@ -140,13 +146,14 @@ wire [15:0] adder_cout;
 genvar i;
 generate
     for (i=0; i<16; i=i+1) begin : adder_loop
-        one_bit_adder u_adder(
-            .a(adder_a[i]),
-            .b(adder_b[i]),
-            .c(adder_c[i]),
-            .s(adder_s[i]),
-            .cout(adder_cout[i])
-        );
+        assign {adder_cout[i], adder_s[i]} = adder_a[i] + adder_b[i] + adder_c[i];
+        // one_bit_adder u_adder(
+        //     .a(adder_a[i]),
+        //     .b(adder_b[i]),
+        //     .c(adder_c[i]),
+        //     .s(adder_s[i]),
+        //     .cout(adder_cout[i])
+        // );
     end
 endgenerate
 

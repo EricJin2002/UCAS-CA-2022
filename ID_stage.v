@@ -1,4 +1,4 @@
-`include "marco.h"
+`include "macro.vh"
 
 module ID_stage(
     input  wire        clk,

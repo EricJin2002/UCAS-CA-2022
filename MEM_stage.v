@@ -1,4 +1,4 @@
-`include "marco.h"
+`include "macro.vh"
 
 module MEM_stage(
     input  wire        clk,

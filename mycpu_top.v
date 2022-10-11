@@ -1,4 +1,4 @@
-`include "marco.h"
+`include "macro.vh"
 
 module mycpu_top(
     input  wire        clk,

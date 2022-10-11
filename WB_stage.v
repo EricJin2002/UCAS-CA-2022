@@ -1,4 +1,4 @@
-`include "marco.h"
+`include "macro.vh"
 module WB_stage(
     input  wire        clk,
     input  wire        resetn,

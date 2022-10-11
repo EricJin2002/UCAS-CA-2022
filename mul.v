@@ -60,7 +60,7 @@ module mul(
             addr  addr2(.a(Nsum[  6][i-1]),.b(Nsum[  7][i-1]),.cin(Nsum[  8][i-1]),.s(Ssum[ 2][i-1]),.cout(Csum[ 2][i]));
             addr  addr3(.a(Nsum[  9][i-1]),.b(Nsum[ 10][i-1]),.cin(Nsum[ 11][i-1]),.s(Ssum[ 3][i-1]),.cout(Csum[ 3][i]));
             addr  addr4(.a(Nsum[ 12][i-1]),.b(Nsum[ 13][i-1]),.cin(Nsum[ 14][i-1]),.s(Ssum[ 4][i-1]),.cout(Csum[ 4][i]));
-            addr  addr5(.a(Nsum[ 15][i-1]),.b(1'b0          ),.cin(1'b0          ),.s(Ssum[ 5][i-1]),.cout(Csum[ 5][i]));
+            addr  addr5(.a(Nsum[ 15][i-1]),.b(Nsum[ 16][i-1]),.cin(1'b0          ),.s(Ssum[ 5][i-1]),.cout(Csum[ 5][i]));
             addr  addr6(.a(Ssum[  0][i-1]),.b(Ssum[  1][i-1]),.cin(Ssum[  2][i-1]),.s(Ssum[ 6][i-1]),.cout(Csum[ 6][i]));
             addr  addr7(.a(Ssum[  3][i-1]),.b(Ssum[  4][i-1]),.cin(Ssum[  5][i-1]),.s(Ssum[ 7][i-1]),.cout(Csum[ 7][i]));
             addr  addr8(.a(Csum[  0][i-1]),.b(Csum[  1][i-1]),.cin(Csum[  2][i-1]),.s(Ssum[ 8][i-1]),.cout(Csum[ 8][i]));
@@ -74,7 +74,7 @@ module mul(
             addr addr16(.a(Ssum[ 15][i-1]),.b(Csum[ 14][i-1]),.cin(Csum[ 15][i-1]),.s(Ssum[16][i-1]),.cout(Csum[16][i]));
         end
     endgenerate
-    assign ans = (Ssum[16] + Csum[16] + Nsum[16]);
+    assign ans = (Ssum[16] + Csum[16]);
     //assign cmpans2 = Nsum[0] + Nsum[1] + Nsum[2] + Nsum[3] + Nsum[4] + Nsum[5] + Nsum[6] + Nsum[7] + Nsum[8] + Nsum[9] + Nsum[10] + Nsum[11] + Nsum[12] + Nsum[13] + Nsum[14] + Nsum[15] + Nsum[16];
 endmodule
 

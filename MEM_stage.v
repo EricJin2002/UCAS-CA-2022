@@ -44,15 +44,19 @@ always @(posedge clk)begin
     // end
 end
 //EXE_to_MEM_BUS = {exe_pc,gr_we,dest,alu_res,data_addr,mem_en,mem_we,loadop,rfrom_mem}
-wire [31: 0] mem_pc     ;
-wire         gr_we      ;
-wire [ 4: 0] dest       ;
-wire [31: 0] alu_result ;
-wire [31: 0] data_sum   ;
-wire         mem_en     ;
-wire [ 4: 0] load_op    ;
-wire         rfrom_mem  ;
-assign {mem_pc,gr_we,dest,alu_result,data_sum,mem_en,load_op,rfrom_mem} = EXE_to_MEM_BUS_temp;
+wire [31: 0] mem_pc;
+wire         gr_we;
+wire [ 4: 0] dest;
+wire [31: 0] alu_result;
+wire [31: 0] data_sum;
+wire         mem_en;
+wire [ 4: 0] load_op;
+wire         rfrom_mem;
+wire [13: 0] csr_num;
+wire         csr_we;
+wire [31: 0] csr_wvalue;
+wire [31: 0] csr_wmask;
+assign {mem_pc,gr_we,dest,alu_result,data_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask} = EXE_to_MEM_BUS_temp;
 
 wire [31: 0] mem_result_shift;
 wire [31: 0] mem_result;
@@ -67,6 +71,6 @@ assign ms_final_result = rfrom_mem ? mem_result : alu_result;
 assign MEM_RF_BUS = {{`DEST_LEN{gr_we & MEM_valid}} & dest,rfrom_mem,ms_final_result};
 
 //MEM_to_WB_BUS = {mem_pc,gr_we,dest,memresult,aluresult,loadop,rfrom_mem}
-assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,mem_result,alu_result,rfrom_mem};
+assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,mem_result,alu_result,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask};
 
 endmodule

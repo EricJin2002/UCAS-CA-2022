@@ -2,6 +2,11 @@
 module WB_stage(
     input  wire        clk,
     input  wire        resetn,
+
+    output wire         csr_num,
+    output wire         csr_we,
+    output wire [31: 0] csr_wvalue,
+    output wire [31: 0] csr_wmask,
     // trace debug interface
     output wire [31:0] debug_wb_pc,
     output wire [ 3:0] debug_wb_rf_we,
@@ -49,7 +54,7 @@ wire [ 4: 0] dest;
 wire [31: 0] mem_result;
 wire [31: 0] alu_result;
 wire         rfrom_mem;
-assign {wb_pc,gr_we,dest,mem_result,alu_result,rfrom_mem} = MEM_to_WB_BUS_temp;
+assign {wb_pc,gr_we,dest,mem_result,alu_result,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask} = MEM_to_WB_BUS_temp;
 
  
 wire         rf_we   ;

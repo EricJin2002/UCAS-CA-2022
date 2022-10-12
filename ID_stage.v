@@ -11,7 +11,10 @@ module ID_stage(
     input  wire [`WB_RF_LEN     - 1: 0] WB_RF_BUS,
     output wire [`ID_to_EXE_LEN - 1: 0] ID_to_EXE_BUS,
     output wire [`BR_BUS_LEN    - 1: 0] BR_BUS,
-    //
+    
+    output wire [13: 0] csr_num,
+    input  wire [31: 0] csr_rvalue,
+
     input  wire        EXE_allowin,
     input  wire        IF_to_ID_valid,
     output wire        ID_to_EXE_valid,
@@ -98,10 +101,12 @@ wire [ 5:0] op_31_26;
 wire [ 3:0] op_25_22;
 wire [ 1:0] op_21_20;
 wire [ 4:0] op_19_15;
+wire [ 4:0] op_9_5;
 wire [ 4:0] rd;
 wire [ 4:0] rj;
 wire [ 4:0] rk;
 wire [ 4:0] rkd;
+wire [14:0] code;
 wire [11:0] i12;
 wire [19:0] i20;
 wire [15:0] i16;
@@ -111,6 +116,7 @@ wire [63:0] op_31_26_d;
 wire [15:0] op_25_22_d;
 wire [ 3:0] op_21_20_d;
 wire [31:0] op_19_15_d;
+wire [ 4:0] op_9_5_d;
 
 wire        inst_add_w;
 wire        inst_sub_w;
@@ -158,6 +164,12 @@ wire        inst_div_w;
 wire        inst_mod_w;
 wire        inst_div_wu;
 wire        inst_mod_wu;
+wire        inst_csrrd;
+wire        inst_csrwr;
+wire        inst_csrxchg;
+wire        inst_ertn;
+wire        inst_syscall;
+wire        inst_break;
 
 wire        need_ui5;
 wire        need_ui12;
@@ -172,11 +184,13 @@ assign op_31_26  = inst[31:26];
 assign op_25_22  = inst[25:22];
 assign op_21_20  = inst[21:20];
 assign op_19_15  = inst[19:15];
+assign op_9_5    = inst[ 9: 5];
 
-assign rd   = inst[ 4: 0];
-assign rj   = inst[ 9: 5];
-assign rk   = inst[14:10];
-
+assign rd       = inst[ 4: 0];
+assign rj       = inst[ 9: 5];
+assign rk       = inst[14:10];
+assign csr_num  = inst[23:10];
+assign code     = inst[14: 0];
 
 assign i12  = inst[21:10];
 assign i20  = inst[24: 5];
@@ -187,6 +201,7 @@ decoder_6_64 u_dec0(.in(op_31_26 ), .out(op_31_26_d ));
 decoder_4_16 u_dec1(.in(op_25_22 ), .out(op_25_22_d ));
 decoder_2_4  u_dec2(.in(op_21_20 ), .out(op_21_20_d ));
 decoder_5_32 u_dec3(.in(op_19_15 ), .out(op_19_15_d ));
+decoder_5_32 u_dec4(.in(op_9_5   ), .out(op_9_5_d   ));
 
 assign inst_add_w       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h00];
 assign inst_sub_w       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h02];
@@ -234,6 +249,12 @@ assign inst_div_w       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2
 assign inst_mod_w       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h01];
 assign inst_div_wu      = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h02];
 assign inst_mod_wu      = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h03];
+assign inst_csrrd       = op_31_26_d[6'h01] & ~inst[25] & ~inst[24] & op_9_5_d[5'h00];
+assign inst_csrwr       = op_31_26_d[6'h01] & ~inst[25] & ~inst[24] & op_9_5_d[5'h01];
+assign inst_csrxchg     = op_31_26_d[6'h01] & ~inst[25] & ~inst[24] & ~op_9_5_d[5'h00] & ~op_9_5_d[5'h01];
+assign inst_ertn        = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h10] & (rk==5'b01110) & (rj==5'b00000) & (rd==5'b00000);
+assign inst_break       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h14];
+assign inst_syscall     = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h16];
 
 assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu
                     | inst_st_w | inst_st_b | inst_st_h
@@ -270,9 +291,10 @@ assign imm = {32{src2_is_4}} & 32'h4                     |
              {32{need_ui12}} & {{20{1'b0}},i12[11:0]}
              ;
 
-assign src_reg_is_rd  = inst_beq   | inst_bne   | inst_st_w | inst_st_b | inst_st_h | inst_blt | inst_bge | inst_bltu | inst_bgeu;
+assign src_reg_is_rd  = inst_beq | inst_bne | inst_st_w | inst_st_b | inst_st_h | inst_blt | inst_bge | inst_bltu | inst_bgeu
+                      | inst_csrrd | inst_csrwr | inst_csrxchg;
 assign src_reg_is_rk  = inst_add_w | inst_sub_w | inst_slt | inst_sltu | inst_and | inst_or | inst_nor | inst_xor | inst_sll | inst_srl | inst_sra | inst_mul_w | inst_mulh_w | inst_mulh_wu | inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;   
-assign src_reg_is_rj  = ~inst_b & ~inst_bl & ~inst_lu12i_w;
+assign src_reg_is_rj  = ~inst_b & ~inst_bl & ~inst_lu12i_w & ~inst_csrrd & ~inst_csrwr & ~inst_ertn & ~inst_break & ~inst_syscall;
 assign src_reg_is_rkd = src_reg_is_rd | src_reg_is_rk;
 assign rkd = {5{src_reg_is_rk}} & rk |
              {5{src_reg_is_rd}} & rd ;
@@ -308,11 +330,22 @@ assign src2_is_5_bit=  inst_sll         |
 assign store_load_op = {inst_st_w, inst_st_b, inst_st_h, inst_ld_w, inst_ld_b, inst_ld_h, inst_ld_bu, inst_ld_hu};
 assign rfrom_mem     = inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu;
 assign dst_is_r1     = inst_bl;
-assign gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu;
+assign gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu & ~inst_ertn & ~inst_break & ~inst_syscall;
 assign mem_en        = inst_st_w | inst_st_b | inst_st_h;
 // assign mem_we        = {4{inst_st_w}}; // todo: delete this
 assign dest          = dst_is_r1 ? 5'd1 : rd;
 
+// for csr
+wire [31:0] csr_result;
+wire        rfrom_csr;
+wire        csr_we;
+wire [31:0] csr_wvalue;
+wire [31:0] csr_wmask;
+assign csr_result       = csr_rvalue;
+assign rfrom_csr        = inst_csrrd | inst_csrwr | inst_csrxchg;
+assign csr_we           = inst_csrwr | inst_csrxchg;
+assign csr_wvalue       = rkd_value;
+assign csr_wmask        = inst_csrwr ? 32'hffffffff : rj_value;
 
 assign rf_raddr1 = rj;
 assign rf_raddr2 = src_reg_is_rd ? rd :rk;
@@ -352,7 +385,7 @@ assign br_target = (inst_beq || inst_bne || inst_bl || inst_b || inst_blt || ins
 assign BR_BUS = {br_target,br_taken,br_taken_cancel};
 
 //ID_to_EXE_BUS = {id_pc,gr_we,dest,data_sum,mem_en,mem_we,aluop,alusrc1,alusrc2,loadop,rfrom_me,mul_div_op}
-assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op};
+assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,csr_result,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask};
 
 
 // ready go

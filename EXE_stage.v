@@ -57,7 +57,13 @@ wire [31: 0] alu_src2;
 wire [ 7: 0] store_load_op;
 wire         rfrom_mem;
 wire [ 6: 0] mul_div_op;
-assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op} = ID_to_EXE_BUS_temp;
+wire [31: 0] csr_result;
+wire         rfrom_csr;
+wire [13: 0] csr_num;
+wire         csr_we;
+wire [31: 0] csr_wvalue;
+wire [31: 0] csr_wmask;
+assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,csr_result,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask} = ID_to_EXE_BUS_temp;
 //mul_div_op = {inst_mul_w,inst_mulh_w,inst_mulh_wu,inst_div_w,inst_mod_w,inst_div_wu,inst_mod_wu};
 
 
@@ -151,13 +157,14 @@ assign mul_result = $signed({mul_is_signed & alu_src1[31], alu_src1}) * $signed(
 // );
 
 wire [31: 0] exe_result;
-assign exe_result = {32{mul_div_op[6]}} & mul_result[31: 0]
-                   | {32{mul_div_op[5] || mul_div_op[4]}} & mul_result[63:32]
-                   | {32{mul_div_op[3]}} & div_result_signed[63:32]
-                   | {32{mul_div_op[2]}} & div_result_signed[31: 0]
-                   | {32{mul_div_op[1]}} & div_result_unsigned[63:32]
-                   | {32{mul_div_op[0]}} & div_result_unsigned[31: 0]
-                   | {32{ ~|mul_div_op}} & alu_result;
+assign exe_result = {32{~rfrom_csr & mul_div_op[6]}} & mul_result[31: 0]
+                  | {32{~rfrom_csr & (mul_div_op[5] | mul_div_op[4])}} & mul_result[63:32]
+                  | {32{~rfrom_csr & mul_div_op[3]}} & div_result_signed[63:32]
+                  | {32{~rfrom_csr & mul_div_op[2]}} & div_result_signed[31: 0]
+                  | {32{~rfrom_csr & mul_div_op[1]}} & div_result_unsigned[63:32]
+                  | {32{~rfrom_csr & mul_div_op[0]}} & div_result_unsigned[31: 0]
+                  | {32{~rfrom_csr &  ~|mul_div_op}} & alu_result
+                  | {32{rfrom_csr}} & csr_result;
 
 assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed 
                    || (mul_div_op[1] || mul_div_op[0]) && div_dout_valid_unsigned
@@ -187,5 +194,5 @@ assign data_sram_wdata = {32{store_load_op[`ST_B]}} & {4{mem_sum[ 7:0]}}
 wire [4:0] load_op;
 assign load_op = store_load_op[4:0];
 //EXE_to_MEM_BUS = {exe_pc,gr_we,dest,alu_res,data_sum,mem_en,mem_we,loadop}
-assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem};
+assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask};
 endmodule

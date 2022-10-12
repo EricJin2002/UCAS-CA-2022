@@ -12,8 +12,8 @@ module ID_stage(
     output wire [`ID_to_EXE_LEN - 1: 0] ID_to_EXE_BUS,
     output wire [`BR_BUS_LEN    - 1: 0] BR_BUS,
     
-    output wire [13: 0] csr_num,
-    input  wire [31: 0] csr_rvalue,
+    // output wire [13: 0] csr_num,
+    // input  wire [31: 0] csr_rvalue,
 
     input  wire        EXE_allowin,
     input  wire        IF_to_ID_valid,
@@ -336,12 +336,12 @@ assign mem_en        = inst_st_w | inst_st_b | inst_st_h;
 assign dest          = dst_is_r1 ? 5'd1 : rd;
 
 // for csr
-wire [31:0] csr_result;
+// wire [31:0] csr_result; move csr read to EXE stage
 wire        rfrom_csr;
 wire        csr_we;
 wire [31:0] csr_wvalue;
 wire [31:0] csr_wmask;
-assign csr_result       = csr_rvalue;
+// assign csr_result       = csr_rvalue;
 assign rfrom_csr        = inst_csrrd | inst_csrwr | inst_csrxchg;
 assign csr_we           = inst_csrwr | inst_csrxchg;
 assign csr_wvalue       = rkd_value;
@@ -385,36 +385,44 @@ assign br_target = (inst_beq || inst_bne || inst_bl || inst_b || inst_blt || ins
 assign BR_BUS = {br_target,br_taken,br_taken_cancel};
 
 //ID_to_EXE_BUS = {id_pc,gr_we,dest,data_sum,mem_en,mem_we,aluop,alusrc1,alusrc2,loadop,rfrom_me,mul_div_op}
-assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,csr_result,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask};
+assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask};
 
 
 // ready go
 wire [ 4: 0] EXE_dest;
 wire EXE_rfrom_mem;
-wire [31: 0] EXE_alu_result;
+wire [31: 0] EXE_result;
+wire EXE_valid;
+wire EXE_csr_we;
+wire [13: 0] EXE_csr_num;
 
 wire [ 4: 0] MEM_dest;
 wire MEM_rfrom_mem;
 wire [31: 0] MEM_result;
+wire MEM_valid;
+wire MEM_csr_we;
+wire [13: 0] MEM_csr_num;
 
 wire [ 4: 0] WB_dest ;
 wire WB_rfrom_mem;
 wire [31: 0] WB_result;
 
-assign {EXE_dest,EXE_rfrom_mem,EXE_alu_result} = EXE_RF_BUS;
-assign {MEM_dest,MEM_rfrom_mem,MEM_result    } = MEM_RF_BUS;
-assign {WB_dest ,WB_rfrom_mem ,WB_result     } = WB_RF_BUS ;
+assign {EXE_dest,EXE_rfrom_mem,EXE_result,EXE_valid,EXE_csr_we,EXE_csr_num} = EXE_RF_BUS;
+assign {MEM_dest,MEM_rfrom_mem,MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
+assign {WB_dest ,WB_rfrom_mem ,WB_result                                  } = WB_RF_BUS ;
 
 // wire        src_reg_is_rd;
 // wire        src_reg_is_rk;
 // wire        src_reg_is_rj;
 
-wire checkrj;
-wire checkrkd;
+wire check_rj;
+wire check_rkd;
+wire check_csr;
 
-assign checkrj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(rj ==EXE_dest && EXE_rfrom_mem) : 1;
-assign checkrkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(rkd==EXE_dest && EXE_rfrom_mem) : 1;
-assign ID_ready_go = checkrj && checkrkd;
+assign check_rj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(rj ==EXE_dest && EXE_rfrom_mem) : 1;
+assign check_rkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(rkd==EXE_dest && EXE_rfrom_mem) : 1;
+assign check_csr = rfrom_csr ? ~(EXE_csr_we && EXE_valid && EXE_csr_num==csr_num || MEM_csr_we && MEM_valid && MEM_csr_num==csr_num) : 1;
+assign ID_ready_go = check_rj && check_rkd && check_csr;
 
 assign br_taken_cancel = br_taken & ID_ready_go;
 
@@ -428,8 +436,8 @@ regfile u_regfile(
     .waddr  (rf_waddr ),
     .wdata  (rf_wdata )
     );
-assign rj_value  = (rj  == 5'b00000) ? 32'b0 : (rj  == EXE_dest) ? EXE_alu_result : (rj  == MEM_dest) ? MEM_result : (rj  == WB_dest) ? WB_result : rf_rdata1;
-assign rkd_value = (rkd == 5'b00000) ? 32'b0 : (rkd == EXE_dest) ? EXE_alu_result : (rkd == MEM_dest) ? MEM_result : (rkd == WB_dest) ? WB_result : rf_rdata2;
+assign rj_value  = (rj  == 5'b00000) ? 32'b0 : (rj  == EXE_dest) ? EXE_result : (rj  == MEM_dest) ? MEM_result : (rj  == WB_dest) ? WB_result : rf_rdata1;
+assign rkd_value = (rkd == 5'b00000) ? 32'b0 : (rkd == EXE_dest) ? EXE_result : (rkd == MEM_dest) ? MEM_result : (rkd == WB_dest) ? WB_result : rf_rdata2;
 // assign rj_value  = (rf_we && rf_waddr!=0 && (rf_raddr1 == rf_waddr)) ? rf_wdata : rf_rdata1; 
 // assign rkd_value = (rf_we && rf_waddr!=0 && (rf_raddr2 == rf_waddr)) ? rf_wdata : rf_rdata2;
 endmodule

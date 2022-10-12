@@ -19,5 +19,17 @@ module control_status_register(
     input  wire [ 8: 0] wb_esubcode
 );
 
+// CRMD, PRMD, ESTAT, ERA, EENTRY, SAVE0~3
+reg  [31: 0] csr_crmd;
+reg  [31: 0] csr_prmd;
+reg  [31: 0] csr_estat;
+reg  [31: 0] csr_era;
+reg  [31: 0] csr_eentry;
+reg  [31: 0] csr_save0;
+reg  [31: 0] csr_save1;
+reg  [31: 0] csr_save2;
+reg  [31: 0] csr_save3;
+
+
 
 endmodule

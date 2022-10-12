@@ -68,7 +68,7 @@ assign mem_result       = {32{load_op[`LD_B] || load_op[`LD_BU]}} & {{24{load_op
 wire [31: 0] ms_final_result;
 assign ms_final_result = rfrom_mem ? mem_result : alu_result;
 //{dest,op,mem_result,ms_final_result}
-assign MEM_RF_BUS = {{`DEST_LEN{gr_we & MEM_valid}} & dest,rfrom_mem,ms_final_result};
+assign MEM_RF_BUS = {{`DEST_LEN{gr_we & MEM_valid}} & dest,rfrom_mem,ms_final_result,MEM_valid,csr_we,csr_num};
 
 //MEM_to_WB_BUS = {mem_pc,gr_we,dest,memresult,aluresult,loadop,rfrom_mem}
 assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,mem_result,alu_result,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask};

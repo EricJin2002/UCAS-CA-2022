@@ -7,6 +7,9 @@ module EXE_stage(
     input  wire [`ID_to_EXE_LEN  - 1: 0] ID_to_EXE_BUS,
     output wire [`EXE_to_MEM_LEN - 1: 0] EXE_to_MEM_BUS,
     output wire [`EXE_RF_LEN     - 1: 0] EXE_RF_BUS,
+
+    output wire [13: 0] csr_num,
+    input  wire [31: 0] csr_rvalue,
     //
     output wire        data_sram_en,     
     output wire [ 3:0] data_sram_we,
@@ -59,7 +62,7 @@ wire         rfrom_mem;
 wire [ 6: 0] mul_div_op;
 wire [31: 0] csr_result;
 wire         rfrom_csr;
-wire [13: 0] csr_num;
+// wire [13: 0] csr_num;
 wire         csr_we;
 wire [31: 0] csr_wvalue;
 wire [31: 0] csr_wmask;
@@ -164,14 +167,14 @@ assign exe_result = {32{~rfrom_csr & mul_div_op[6]}} & mul_result[31: 0]
                   | {32{~rfrom_csr & mul_div_op[1]}} & div_result_unsigned[63:32]
                   | {32{~rfrom_csr & mul_div_op[0]}} & div_result_unsigned[31: 0]
                   | {32{~rfrom_csr &  ~|mul_div_op}} & alu_result
-                  | {32{rfrom_csr}} & csr_result;
+                  | {32{rfrom_csr}} & csr_rvalue;
 
 assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed 
                    || (mul_div_op[1] || mul_div_op[0]) && div_dout_valid_unsigned
                    || !(mul_div_op[3] || mul_div_op[2] || mul_div_op[1] || mul_div_op[0]);
 
 //{dest,op,aluresult}
-assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,exe_result};
+assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,exe_result,EXE_valid,csr_we,csr_num};
 
 assign data_sram_en    = (rfrom_mem || mem_en) && EXE_valid;
 

@@ -1,11 +1,11 @@
 `define BR_BUS_LEN 34
 `define IF_to_ID_LEN 64
-`define ID_to_EXE_LEN 275
+`define ID_to_EXE_LEN 243
 `define RF_BUS_LEN 38
 `define EXE_to_MEM_LEN 188
 `define MEM_to_WB_LEN 182
-`define EXE_RF_LEN 38
-`define MEM_RF_LEN 38
+`define EXE_RF_LEN 54
+`define MEM_RF_LEN 54
 `define WB_RF_LEN  38
 `define DEST_LEN 5
 
@@ -67,3 +67,32 @@
 
 `define ESUBCODE_ADEF 8'b0
 `define ESUBCODE_ADEM 8'b1
+
+`define CSR_CRMD_PLV    1:0
+`define CSR_CRMD_IE     2
+`define CSR_CRMD_DA     3
+`define CSR_CRMD_PG     4
+`define CSR_CRMD_DATF   6:5
+`define CSR_CRMD_DATM   8:7
+//`define CSR_CRMD_0      31:9
+
+`define CSR_PRMD_PPLV   1:0
+`define CSR_PRMD_PIE    2
+//`define CSR_PRMD_0      31:3
+
+`define CSR_ESTAT_IS        12:0
+//`define CSR_ESTAT_0         15:13
+`define CSR_ESTAT_ECODE     21:16
+`define CSR_ESTAT_ESUBCODE  30:22
+//`define CSR_ESTAT_0         31
+
+`define CSR_ERA_PC      31:0
+
+//`define CSR_EENTRY_0    5:0
+`define CSR_EENTRY_VA   31:6
+
+`define CSR_SAVE0_DATA  31:0
+
+`define CSR_SAVE1_DATA  31:0
+
+`define CSR_SAVE2_DATA  31:0

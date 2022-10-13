@@ -77,6 +77,8 @@ wire [`MEM_RF_LEN     - 1: 0] MEM_RF_BUS;
 //{dest,op,data}
 wire [`WB_RF_LEN      - 1: 0] WB_RF_BUS;
 
+wire [ 6: 0] ID_to_EXE_mul_div_op;
+
 //for CSR
 wire [13: 0] csr_wnum;
 wire         csr_we;
@@ -87,12 +89,17 @@ wire [31: 0] csr_rvalue;
 
 wire [31: 0] wb_pc;
 wire [ 7: 0] hw_int_in;
+wire         ipi_int_in;
 wire [31: 0] ex_entry;
+wire [31: 0] ex_ra;
 wire         has_int;
 wire         ertn_flush;
 wire         wb_ex;
 wire [ 5: 0] wb_ecode;
-wire [ 8: 0] wb_esubcod;
+wire [ 8: 0] wb_esubcode;
+
+wire         mem_ertn;
+wire         mem_ex;
 
 IF_stage myIF(
     .clk(clk),
@@ -106,7 +113,11 @@ IF_stage myIF(
     .IF_to_ID_BUS(IF_to_ID_BUS),
     .ID_allowin(ID_allowin),
     .IF_to_ID_valid(IF_to_ID_valid),
-    .IF_allowin(IF_allowin)
+    .IF_allowin(IF_allowin),
+    .ertn_flush(ertn_flush),
+    .wb_ex(wb_ex),
+    .ex_ra(ex_ra),
+    .ex_entry(ex_entry)
 );
 
 ID_stage myID(
@@ -122,7 +133,10 @@ ID_stage myID(
     .EXE_allowin(EXE_allowin),
     .IF_to_ID_valid(IF_to_ID_valid),
     .ID_to_EXE_valid(ID_to_EXE_valid),
-    .ID_allowin(ID_allowin)
+    .ID_allowin(ID_allowin),
+    .ertn_flush(ertn_flush),
+    .wb_ex(wb_ex),
+    .ID_to_EXE_mul_div_op(ID_to_EXE_mul_div_op)
 );
 
 EXE_stage myEXE(
@@ -140,7 +154,12 @@ EXE_stage myEXE(
     .ID_to_EXE_valid(ID_to_EXE_valid),
     .MEM_allowin(MEM_allowin),
     .EXE_allowin(EXE_allowin),
-    .EXE_to_MEM_valid(EXE_to_MEM_valid)
+    .EXE_to_MEM_valid(EXE_to_MEM_valid),
+    .ertn_flush(ertn_flush),
+    .wb_ex(wb_ex),
+    .mem_ertn(mem_ertn),
+    .mem_ex(mem_ex),
+    .ID_to_EXE_mul_div_op(ID_to_EXE_mul_div_op)
 );
 
 MEM_stage myMEM(
@@ -153,7 +172,11 @@ MEM_stage myMEM(
     .EXE_to_MEM_valid(EXE_to_MEM_valid),
     .WB_allowin(WB_allowin),
     .MEM_allowin(MEM_allowin),
-    .MEM_to_WB_valid(MEM_to_WB_valid)
+    .MEM_to_WB_valid(MEM_to_WB_valid),
+    .ertn_flush(ertn_flush),
+    .wb_ex(wb_ex),
+    .mem_ertn(mem_ertn),
+    .mem_ex(mem_ex)
 );
 
 WB_stage myWB(
@@ -163,6 +186,11 @@ WB_stage myWB(
     .csr_we(csr_we),
     .csr_wvalue(csr_wvalue),
     .csr_wmask(csr_wmask),
+    .wb_pc(wb_pc),
+    .ertn_flush(ertn_flush),
+    .wb_ex(wb_ex),
+    .wb_ecode(wb_ecode),
+    .wb_esubcode(wb_esubcode),
     .debug_wb_pc(debug_wb_pc),
     .debug_wb_rf_we(debug_wb_rf_we),
     .debug_wb_rf_wnum(debug_wb_rf_wnum),
@@ -185,6 +213,8 @@ control_status_register myCSR(
     .csr_rvalue(csr_rvalue),
     .wb_pc(wb_pc),
     .hw_int_in(hw_int_in),
+    .ipi_int_in(ipi_int_in),
+    .ex_ra(ex_ra),
     .ex_entry(ex_entry),
     .has_int(has_int),
     .ertn_flush(ertn_flush),
@@ -192,4 +222,7 @@ control_status_register myCSR(
     .wb_ecode(wb_ecode),
     .wb_esubcode(wb_esubcode)
 );
+
+assign hw_int_in = 8'b0;
+assign ipi_int_in = 1'b0;
 endmodule

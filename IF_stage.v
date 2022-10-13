@@ -10,12 +10,17 @@ module IF_stage(
     output wire [31:0] inst_sram_wdata,
     input  wire [31:0] inst_sram_rdata,
     //BUS
-    input  wire [`BR_BUS_LEN  : 0] BR_BUS,
-    output wire [`IF_to_ID_LEN: 0] IF_to_ID_BUS,
+    input  wire [`BR_BUS_LEN   - 1: 0] BR_BUS,
+    output wire [`IF_to_ID_LEN - 1: 0] IF_to_ID_BUS,
     //
     input  wire        ID_allowin,
     output wire        IF_to_ID_valid,
-    output wire        IF_allowin    
+    output wire        IF_allowin,
+
+    input  wire        ertn_flush,
+    input  wire        wb_ex,
+    input  wire [31:0] ex_ra,
+    input  wire [31:0] ex_entry
 );
 
 //BR_BUS = {BR_target,BR_taken}
@@ -27,17 +32,25 @@ wire [31: 0] br_target;
 
 assign {br_target,br_taken,br_taken_cancel} = BR_BUS;  
 
-reg  [31: 0] if_pc    ;//fs_pc
+reg  [31: 0] if_pc;//fs_pc
 wire [31: 0] if_inst;
-wire [31: 0] seq_pc   ;
-wire [31: 0] nextpc   ;
+wire [31: 0] seq_pc;
+wire [31: 0] nextpc;
+wire         preif_ex;
+wire [14: 0] preif_ex_code;
+reg          if_ex;
+reg  [14: 0] if_ex_code;
 
-assign IF_to_ID_BUS = {if_pc,if_inst};
+assign IF_to_ID_BUS = {if_pc,if_inst,if_ex,if_ex_code};
 
 assign seq_pc = if_pc + 3'h4;
-assign nextpc = br_taken ? br_target : seq_pc;
+assign nextpc = {32{ wb_ex                            }} & ex_entry
+              | {32{!wb_ex &&  ertn_flush             }} & ex_ra
+              | {32{!wb_ex && !ertn_flush &&  br_taken}} & br_target
+              | {32{!wb_ex && !ertn_flush && !br_taken}} & seq_pc;
 
-reg IF_valid;
+
+reg  IF_valid;
 wire IF_ready_go;
 wire validin;
 
@@ -66,6 +79,23 @@ always @(posedge clk)begin
         if_pc <= nextpc;
     end
 end
+
+// todo: assign preif_ex = ... preif_ex_code = ...
+assign preif_ex = 1'b0;
+always @(posedge clk) begin
+    if (~resetn) begin
+        if_ex <= 1'b0;
+    end else if(validin && IF_allowin) begin
+        if_ex <= preif_ex;
+    end
+end
+
+always @(posedge clk) begin
+    if(validin && IF_allowin) begin
+        if_ex_code <= preif_ex_code;
+    end
+end
+
 //INST RAM
 assign inst_sram_en    = validin && IF_allowin;
 assign inst_sram_we    = 4'b0;

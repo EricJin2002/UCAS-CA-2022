@@ -19,7 +19,14 @@ module EXE_stage(
     input  wire ID_to_EXE_valid,
     input  wire MEM_allowin,
     output wire EXE_allowin,
-    output wire EXE_to_MEM_valid
+    output wire EXE_to_MEM_valid,
+
+    input  wire        ertn_flush,
+    input  wire        wb_ex,
+    input  wire        mem_ertn,
+    input  wire        mem_ex,
+
+    input  wire [ 6:0] ID_to_EXE_mul_div_op
 );
 reg EXE_valid;
 wire EXE_ready_go;
@@ -27,10 +34,11 @@ assign EXE_to_MEM_valid = EXE_valid && EXE_ready_go;
 assign EXE_allowin = !EXE_valid || EXE_ready_go && MEM_allowin;
 
 always @(posedge clk)begin
-    if(~resetn)begin
+    if (~resetn) begin
         EXE_valid <= 1'b0;
-    end
-    else if(EXE_allowin)begin
+    end else if (ertn_flush || wb_ex) begin
+        EXE_valid <= 1'b0;
+    end else if (EXE_allowin) begin
         EXE_valid <= ID_to_EXE_valid;
     end
 end
@@ -60,13 +68,17 @@ wire [31: 0] alu_src2;
 wire [ 7: 0] store_load_op;
 wire         rfrom_mem;
 wire [ 6: 0] mul_div_op;
-wire [31: 0] csr_result;
 wire         rfrom_csr;
 // wire [13: 0] csr_num;
 wire         csr_we;
 wire [31: 0] csr_wvalue;
 wire [31: 0] csr_wmask;
-assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,csr_result,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask} = ID_to_EXE_BUS_temp;
+wire         exe_ex_in;
+wire         exe_ex_out;
+wire [14: 0] exe_ex_code_in;
+wire [14: 0] exe_ex_code_out;
+wire         inst_ertn;
+assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_in,exe_ex_code_in,inst_ertn} = ID_to_EXE_BUS_temp;
 //mul_div_op = {inst_mul_w,inst_mulh_w,inst_mulh_wu,inst_div_w,inst_mod_w,inst_div_wu,inst_mod_wu};
 
 
@@ -87,16 +99,18 @@ div_gen_signed u_div_gen_signed(
     .aclk                   (clk),
     .s_axis_divisor_tdata   (alu_src2),
     .s_axis_divisor_tready  (div_divisor_ready_signed),
-    .s_axis_divisor_tvalid  (div_valid_signed && EXE_valid),
+    .s_axis_divisor_tvalid  (div_valid_signed && EXE_valid && 
+                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush)),
     .s_axis_dividend_tdata  (alu_src1),
     .s_axis_dividend_tready (div_dividend_ready_signed),
-    .s_axis_dividend_tvalid (div_valid_signed && EXE_valid),
+    .s_axis_dividend_tvalid (div_valid_signed && EXE_valid && 
+                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush)),
     .m_axis_dout_tdata      (div_result_signed),
     .m_axis_dout_tvalid     (div_dout_valid_signed)
 );
 
-wire [6:0] ID_to_EXE_mul_div_op;
-assign ID_to_EXE_mul_div_op = ID_to_EXE_BUS[6:0];
+// wire [6:0] ID_to_EXE_mul_div_op;
+// assign ID_to_EXE_mul_div_op = ID_to_EXE_BUS[6:0];
 
 always @(posedge clk)begin
     if(~resetn)begin
@@ -117,20 +131,22 @@ div_gen_unsigned u_div_gen_unsigned(
     .aclk                   (clk),
     .s_axis_divisor_tdata   (alu_src2),
     .s_axis_divisor_tready  (div_divisor_ready_unsigned),
-    .s_axis_divisor_tvalid  (div_valid_unsigned && EXE_valid),
+    .s_axis_divisor_tvalid  (div_valid_unsigned && EXE_valid && 
+                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush)),
     .s_axis_dividend_tdata  (alu_src1),
     .s_axis_dividend_tready (div_dividend_ready_unsigned),
-    .s_axis_dividend_tvalid (div_valid_unsigned && EXE_valid),
+    .s_axis_dividend_tvalid (div_valid_unsigned && EXE_valid && 
+                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush)),
     .m_axis_dout_tdata      (div_result_unsigned),
     .m_axis_dout_tvalid     (div_dout_valid_unsigned)
 );
 
 always @(posedge clk)begin
-    if(~resetn)begin
+    if (~resetn) begin
         div_valid_unsigned <= 1'b0;
-    end else if (ID_to_EXE_valid && EXE_allowin)
+    end else if (ID_to_EXE_valid && EXE_allowin) begin
         div_valid_unsigned <= ID_to_EXE_mul_div_op[1] || ID_to_EXE_mul_div_op[0];
-    else if(div_divisor_ready_unsigned && div_dividend_ready_unsigned)begin
+    end else if (div_divisor_ready_unsigned && div_dividend_ready_unsigned) begin
         div_valid_unsigned <= 1'b0;
     end
 end
@@ -176,7 +192,8 @@ assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed
 //{dest,op,aluresult}
 assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,exe_result,EXE_valid,csr_we,csr_num};
 
-assign data_sram_en    = (rfrom_mem || mem_en) && EXE_valid;
+assign data_sram_en    = (rfrom_mem || mem_en) && EXE_valid && 
+                        !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush);
 
 wire [3:0] mask;
 assign mask = {
@@ -196,6 +213,10 @@ assign data_sram_wdata = {32{store_load_op[`ST_B]}} & {4{mem_sum[ 7:0]}}
 
 wire [4:0] load_op;
 assign load_op = store_load_op[4:0];
+
+assign exe_ex_out = exe_ex_in;
+assign exe_ex_code_out = exe_ex_code_in;
+
 //EXE_to_MEM_BUS = {exe_pc,gr_we,dest,alu_res,data_sum,mem_en,mem_we,loadop}
-assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask};
+assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_out,exe_ex_code_out,inst_ertn};
 endmodule

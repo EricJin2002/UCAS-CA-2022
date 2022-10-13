@@ -18,7 +18,12 @@ module ID_stage(
     input  wire        EXE_allowin,
     input  wire        IF_to_ID_valid,
     output wire        ID_to_EXE_valid,
-    output wire        ID_allowin
+    output wire        ID_allowin,
+    
+    input  wire        ertn_flush,
+    input  wire        wb_ex,
+
+    output wire [ 6:0] ID_to_EXE_mul_div_op
 );
 //IF_to_ID_BUS = {if_pc,if_inst}
 //RF_BUS from WB to ID = {rf_we,dest,res}
@@ -38,13 +43,13 @@ assign ID_to_EXE_valid = ID_valid && ID_ready_go;
 assign ID_allowin = !ID_valid || ID_ready_go && EXE_allowin;
 
 always @(posedge clk)begin
-    if(~resetn)begin
+    if (~resetn) begin
         ID_valid <= 1'b0;
-    end
-    else if(br_taken_cancel)begin
+    end else if (ertn_flush || wb_ex) begin
         ID_valid <= 1'b0;
-    end
-    else if(ID_allowin)begin
+    end else if (br_taken_cancel) begin
+        ID_valid <= 1'b0;
+    end else if (ID_allowin) begin
         ID_valid <= IF_to_ID_valid;
     end
 end
@@ -61,8 +66,12 @@ reg [`RF_BUS_LEN    - 1: 0] RF_BUS_temp;
 //IF_to_ID_BUS = {if_pc,if_inst}
 wire [31: 0] id_pc;
 wire [31: 0] inst;
+wire         id_ex_in;
+wire         id_ex_out;
+wire [14: 0] id_ex_code_in;
+wire [14: 0] id_ex_code_out;
 reg [`IF_to_ID_LEN  - 1: 0] IF_to_ID_BUS_temp;
-assign {id_pc,inst} = IF_to_ID_BUS_temp;
+assign {id_pc,inst,id_ex_in,id_ex_code_in} = IF_to_ID_BUS_temp;
 assign {rf_we,rf_waddr,rf_wdata} = RF_BUS;
 always @(posedge clk)begin
     if(~resetn)begin
@@ -106,6 +115,7 @@ wire [ 4:0] rd;
 wire [ 4:0] rj;
 wire [ 4:0] rk;
 wire [ 4:0] rkd;
+wire [13:0] csr_num;
 wire [14:0] code;
 wire [11:0] i12;
 wire [19:0] i20;
@@ -116,7 +126,7 @@ wire [63:0] op_31_26_d;
 wire [15:0] op_25_22_d;
 wire [ 3:0] op_21_20_d;
 wire [31:0] op_19_15_d;
-wire [ 4:0] op_9_5_d;
+wire [31:0] op_9_5_d;
 
 wire        inst_add_w;
 wire        inst_sub_w;
@@ -341,7 +351,6 @@ wire        rfrom_csr;
 wire        csr_we;
 wire [31:0] csr_wvalue;
 wire [31:0] csr_wmask;
-// assign csr_result       = csr_rvalue;
 assign rfrom_csr        = inst_csrrd | inst_csrwr | inst_csrxchg;
 assign csr_we           = inst_csrwr | inst_csrxchg;
 assign csr_wvalue       = rkd_value;
@@ -384,8 +393,13 @@ assign br_target = (inst_beq || inst_bne || inst_bl || inst_b || inst_blt || ins
 //BR_BUS = {BR_target,BR_taken,BR_taken_cancel}
 assign BR_BUS = {br_target,br_taken,br_taken_cancel};
 
+assign id_ex_out        = id_ex_in || inst_syscall || inst_break;
+assign id_ex_code_out   = id_ex_in ? id_ex_code_in : 
+                          {32{inst_syscall}} & {9'b0, `ECODE_SYS} 
+                        | {32{inst_break  }} & {9'b0, `ECODE_BRK};
+
 //ID_to_EXE_BUS = {id_pc,gr_we,dest,data_sum,mem_en,mem_we,aluop,alusrc1,alusrc2,loadop,rfrom_me,mul_div_op}
-assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask};
+assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,id_ex_out,id_ex_code_out,inst_ertn};
 
 
 // ready go
@@ -422,7 +436,7 @@ wire check_csr;
 assign check_rj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(rj ==EXE_dest && EXE_rfrom_mem) : 1;
 assign check_rkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(rkd==EXE_dest && EXE_rfrom_mem) : 1;
 assign check_csr = rfrom_csr ? ~(EXE_csr_we && EXE_valid && EXE_csr_num==csr_num || MEM_csr_we && MEM_valid && MEM_csr_num==csr_num) : 1;
-assign ID_ready_go = check_rj && check_rkd && check_csr;
+assign ID_ready_go = check_rj && check_rkd && check_csr || wb_ex || ertn_flush;
 
 assign br_taken_cancel = br_taken & ID_ready_go;
 
@@ -440,4 +454,6 @@ assign rj_value  = (rj  == 5'b00000) ? 32'b0 : (rj  == EXE_dest) ? EXE_result : 
 assign rkd_value = (rkd == 5'b00000) ? 32'b0 : (rkd == EXE_dest) ? EXE_result : (rkd == MEM_dest) ? MEM_result : (rkd == WB_dest) ? WB_result : rf_rdata2;
 // assign rj_value  = (rf_we && rf_waddr!=0 && (rf_raddr1 == rf_waddr)) ? rf_wdata : rf_rdata1; 
 // assign rkd_value = (rf_we && rf_waddr!=0 && (rf_raddr2 == rf_waddr)) ? rf_wdata : rf_rdata2;
+
+assign ID_to_EXE_mul_div_op = mul_div_op;
 endmodule

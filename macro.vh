@@ -1,9 +1,9 @@
 `define BR_BUS_LEN 34
-`define IF_to_ID_LEN 64
-`define ID_to_EXE_LEN 243
+`define IF_to_ID_LEN 80
+`define ID_to_EXE_LEN 260
 `define RF_BUS_LEN 38
-`define EXE_to_MEM_LEN 188
-`define MEM_to_WB_LEN 182
+`define EXE_to_MEM_LEN 205
+`define MEM_to_WB_LEN 199
 `define EXE_RF_LEN 54
 `define MEM_RF_LEN 54
 `define WB_RF_LEN  38
@@ -96,3 +96,9 @@
 `define CSR_SAVE1_DATA  31:0
 
 `define CSR_SAVE2_DATA  31:0
+
+`define CSR_SAVE3_DATA  31:0
+
+//todo: finish this
+`define CSR_TICLR_CLR  0
+//`define CSR_TICLR_0    31:1

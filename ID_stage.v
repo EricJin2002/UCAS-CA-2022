@@ -3,17 +3,15 @@
 module ID_stage(
     input  wire        clk,
     input  wire        resetn,
-    //bus
+    // bus
     input  wire [`IF_to_ID_LEN  - 1: 0] IF_to_ID_BUS,
     input  wire [`RF_BUS_LEN    - 1: 0] RF_BUS,  
     input  wire [`EXE_RF_LEN    - 1: 0] EXE_RF_BUS,
     input  wire [`MEM_RF_LEN    - 1: 0] MEM_RF_BUS,
     input  wire [`WB_RF_LEN     - 1: 0] WB_RF_BUS,
     output wire [`ID_to_EXE_LEN - 1: 0] ID_to_EXE_BUS,
+    output wire [                 6: 0] ID_to_EXE_mul_div_op,
     output wire [`BR_BUS_LEN    - 1: 0] BR_BUS,
-    
-    // output wire [13: 0] csr_num,
-    // input  wire [31: 0] csr_rvalue,
 
     input  wire        EXE_allowin,
     input  wire        IF_to_ID_valid,
@@ -21,24 +19,19 @@ module ID_stage(
     output wire        ID_allowin,
     
     input  wire        ertn_flush,
-    input  wire        wb_ex,
-
-    output wire [ 6:0] ID_to_EXE_mul_div_op
+    input  wire        wb_ex
 );
-//IF_to_ID_BUS = {if_pc,if_inst}
-//RF_BUS from WB to ID = {rf_we,dest,res}
-//ID_to_EXE_BUS = {id_pc,gr_we,dest,data_addr,mem_en,mem_we,aluop,alusrc1,alusrc2,loadop,rfrom_mem}
-//BR_BUS = {BR_target,BR_taken,BR_taken_cancel}
+
+
+// output branch bus
 wire         br_taken;
 wire         br_taken_cancel;
 wire [31: 0] br_target;
+
+
+// ID
+reg  ID_valid;
 wire ID_ready_go;
-
-
-
-
-
-reg ID_valid;
 assign ID_to_EXE_valid = ID_valid && ID_ready_go;
 assign ID_allowin = !ID_valid || ID_ready_go && EXE_allowin;
 
@@ -54,34 +47,42 @@ always @(posedge clk)begin
     end
 end
 
+
+// register file
 wire [ 4:0] rf_raddr1;
 wire [31:0] rf_rdata1;
 wire [ 4:0] rf_raddr2;
 wire [31:0] rf_rdata2;
-wire rf_we;
-wire [ 4: 0] rf_waddr;
-wire [31: 0] rf_wdata;  
-reg [`RF_BUS_LEN    - 1: 0] RF_BUS_temp;
+wire        rf_we;
+wire [ 4:0] rf_waddr;
+wire [31:0] rf_wdata;
 
-//IF_to_ID_BUS = {if_pc,if_inst}
+
+// IF to ID
+reg  [`IF_to_ID_LEN  - 1: 0] IF_to_ID_BUS_temp;
+
+always @(posedge clk) begin
+    if (~resetn) begin
+        IF_to_ID_BUS_temp <= {`IF_to_ID_LEN{1'b0}};
+    end else if (IF_to_ID_valid && ID_allowin) begin
+        IF_to_ID_BUS_temp <= IF_to_ID_BUS;
+    end
+end
+
 wire [31: 0] id_pc;
 wire [31: 0] inst;
 wire         id_ex_in;
 wire         id_ex_out;
 wire [14: 0] id_ex_code_in;
 wire [14: 0] id_ex_code_out;
-reg [`IF_to_ID_LEN  - 1: 0] IF_to_ID_BUS_temp;
 assign {id_pc,inst,id_ex_in,id_ex_code_in} = IF_to_ID_BUS_temp;
-assign {rf_we,rf_waddr,rf_wdata} = RF_BUS;
-always @(posedge clk)begin
-    if(~resetn)begin
-        IF_to_ID_BUS_temp <= {`IF_to_ID_LEN{1'b0}};
-    end
-    else if(IF_to_ID_valid && ID_allowin)begin
-        IF_to_ID_BUS_temp <= IF_to_ID_BUS;
-    end
-end
 
+
+// WB to RF
+assign {rf_we,rf_waddr,rf_wdata} = RF_BUS;
+
+
+// ID
 wire [11:0] alu_op;
 wire [6:0]  mul_div_op; 
 wire [31:0] alu_src1;
@@ -94,7 +95,6 @@ wire        src2_is_5_bit;
 wire        dst_is_r1;
 wire        gr_we;
 wire        mem_en;
-// wire [3: 0] mem_we;
 wire        src_reg_is_rd;
 wire        src_reg_is_rk;
 wire        src_reg_is_rkd;
@@ -282,10 +282,10 @@ assign alu_op[10] = inst_srai_w | inst_sra;
 assign alu_op[11] = inst_lu12i_w;
 
 assign mul_div_op = {inst_mul_w,inst_mulh_w,inst_mulh_wu,inst_div_w,inst_mod_w,inst_div_wu,inst_mod_wu};
+assign ID_to_EXE_mul_div_op = mul_div_op; // straight to divider, not passing reg
 
 assign need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
-assign need_ui12  =  inst_andi | inst_ori | inst_xori;    
-
+assign need_ui12  =  inst_andi | inst_ori | inst_xori;
 
 assign need_si12  =  inst_addi_w | inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu
                     | inst_st_w | inst_st_b | inst_st_h | inst_sltui | inst_slti;
@@ -298,8 +298,7 @@ assign imm = {32{src2_is_4}} & 32'h4                     |
              {32{need_si20}} & {i20[19:0], 12'b0}        |
              {32{need_ui5 }} & {{27{1'b0}}, i12[4:0]}    |
              {32{need_si12}} & {{20{i12[11]}}, i12[11:0]}|
-             {32{need_ui12}} & {{20{1'b0}},i12[11:0]}
-             ;
+             {32{need_ui12}} & {{20{1'b0}},i12[11:0]}    ;
 
 assign src_reg_is_rd  = inst_beq | inst_bne | inst_st_w | inst_st_b | inst_st_h | inst_blt | inst_bge | inst_bltu | inst_bgeu
                       | inst_csrrd | inst_csrwr | inst_csrxchg;
@@ -342,11 +341,10 @@ assign rfrom_mem     = inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_
 assign dst_is_r1     = inst_bl;
 assign gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu & ~inst_ertn & ~inst_break & ~inst_syscall;
 assign mem_en        = inst_st_w | inst_st_b | inst_st_h;
-// assign mem_we        = {4{inst_st_w}}; // todo: delete this
 assign dest          = dst_is_r1 ? 5'd1 : rd;
 
-// for csr
-// wire [31:0] csr_result; move csr read to EXE stage
+
+// csr
 wire        rfrom_csr;
 wire        csr_we;
 wire [31:0] csr_wvalue;
@@ -356,21 +354,34 @@ assign csr_we           = inst_csrwr | inst_csrxchg;
 assign csr_wvalue       = rkd_value;
 assign csr_wmask        = inst_csrwr ? 32'hffffffff : rj_value;
 
+
+// regfile
 assign rf_raddr1 = rj;
 assign rf_raddr2 = src_reg_is_rd ? rd :rk;
 
+regfile u_regfile(
+    .clk    (clk      ),
+    .raddr1 (rf_raddr1),
+    .rdata1 (rf_rdata1),
+    .raddr2 (rf_raddr2),
+    .rdata2 (rf_rdata2),
+    .we     (rf_we    ),
+    .waddr  (rf_waddr ),
+    .wdata  (rf_wdata )
+);
 
 
-assign jirl_offs = {{14{i16[15]}}, i16[15:0], 2'b0};
-assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
-                             {{14{i16[15]}}, i16[15:0], 2'b0} ;
-
-
-
+// alu
 assign alu_src1 = src1_is_pc  ? id_pc[31:0] : rj_value;
 assign alu_src2 = src2_is_imm ? imm : (src2_is_5_bit ? {{27{1'b0}},rkd_value[4:0]} : rkd_value);
 
-wire cmp_cout;
+
+// branch
+assign jirl_offs = {{14{i16[15]}}, i16[15:0], 2'b0};
+assign br_offs   = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
+                               {{14{i16[15]}}, i16[15:0], 2'b0} ;
+
+wire        cmp_cout;
 wire [31:0] cmp_result;
 wire [31:0] not_rkd_value;
 assign not_rkd_value = ~rkd_value;
@@ -388,46 +399,45 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_bl
                    || inst_b
                   ) && ID_valid;
+assign br_taken_cancel = br_taken & ID_ready_go;
+
 assign br_target = (inst_beq || inst_bne || inst_bl || inst_b || inst_blt || inst_bge || inst_bltu || inst_bgeu) ? (id_pc + br_offs) :
                                                                                                 /*inst_jirl*/ (rj_value + jirl_offs);
-//BR_BUS = {BR_target,BR_taken,BR_taken_cancel}
+
 assign BR_BUS = {br_target,br_taken,br_taken_cancel};
 
+
+// exception
 assign id_ex_out        = id_ex_in || inst_syscall || inst_break;
 assign id_ex_code_out   = id_ex_in ? id_ex_code_in : 
                           {32{inst_syscall}} & {9'b0, `ECODE_SYS} 
                         | {32{inst_break  }} & {9'b0, `ECODE_BRK};
 
-//ID_to_EXE_BUS = {id_pc,gr_we,dest,data_sum,mem_en,mem_we,aluop,alusrc1,alusrc2,loadop,rfrom_me,mul_div_op}
+
+// ID to EXE
 assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,id_ex_out,id_ex_code_out,inst_ertn};
 
 
-// ready go
+// ready go & bypass
 wire [ 4: 0] EXE_dest;
-wire EXE_rfrom_mem;
+wire         EXE_rfrom_mem;
 wire [31: 0] EXE_result;
-wire EXE_valid;
-wire EXE_csr_we;
+wire         EXE_valid;
+wire         EXE_csr_we;
 wire [13: 0] EXE_csr_num;
 
 wire [ 4: 0] MEM_dest;
-wire MEM_rfrom_mem;
 wire [31: 0] MEM_result;
-wire MEM_valid;
-wire MEM_csr_we;
+wire         MEM_valid;
+wire         MEM_csr_we;
 wire [13: 0] MEM_csr_num;
 
 wire [ 4: 0] WB_dest ;
-wire WB_rfrom_mem;
 wire [31: 0] WB_result;
 
 assign {EXE_dest,EXE_rfrom_mem,EXE_result,EXE_valid,EXE_csr_we,EXE_csr_num} = EXE_RF_BUS;
-assign {MEM_dest,MEM_rfrom_mem,MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
-assign {WB_dest ,WB_rfrom_mem ,WB_result                                  } = WB_RF_BUS ;
-
-// wire        src_reg_is_rd;
-// wire        src_reg_is_rk;
-// wire        src_reg_is_rj;
+assign {MEM_dest,              MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
+assign {WB_dest ,              WB_result                                  } = WB_RF_BUS ;
 
 wire check_rj;
 wire check_rkd;
@@ -438,22 +448,9 @@ assign check_rkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(rkd==EXE_dest && EX
 assign check_csr = rfrom_csr ? ~(EXE_csr_we && EXE_valid && EXE_csr_num==csr_num || MEM_csr_we && MEM_valid && MEM_csr_num==csr_num) : 1;
 assign ID_ready_go = check_rj && check_rkd && check_csr || wb_ex || ertn_flush;
 
-assign br_taken_cancel = br_taken & ID_ready_go;
-
-regfile u_regfile(
-    .clk    (clk      ),
-    .raddr1 (rf_raddr1),
-    .rdata1 (rf_rdata1),
-    .raddr2 (rf_raddr2),
-    .rdata2 (rf_rdata2),
-    .we     (rf_we    ),
-    .waddr  (rf_waddr ),
-    .wdata  (rf_wdata )
-    );
 assign rj_value  = (rj  == 5'b00000) ? 32'b0 : (rj  == EXE_dest) ? EXE_result : (rj  == MEM_dest) ? MEM_result : (rj  == WB_dest) ? WB_result : rf_rdata1;
 assign rkd_value = (rkd == 5'b00000) ? 32'b0 : (rkd == EXE_dest) ? EXE_result : (rkd == MEM_dest) ? MEM_result : (rkd == WB_dest) ? WB_result : rf_rdata2;
 // assign rj_value  = (rf_we && rf_waddr!=0 && (rf_raddr1 == rf_waddr)) ? rf_wdata : rf_rdata1; 
 // assign rkd_value = (rf_we && rf_waddr!=0 && (rf_raddr2 == rf_waddr)) ? rf_wdata : rf_rdata2;
 
-assign ID_to_EXE_mul_div_op = mul_div_op;
 endmodule

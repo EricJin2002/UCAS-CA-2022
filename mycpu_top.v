@@ -129,20 +129,21 @@ ID_stage myID(
     .MEM_RF_BUS(MEM_RF_BUS),
     .WB_RF_BUS(WB_RF_BUS),
     .ID_to_EXE_BUS(ID_to_EXE_BUS),
+    .ID_to_EXE_mul_div_op(ID_to_EXE_mul_div_op),
     .BR_BUS(BR_BUS),
     .EXE_allowin(EXE_allowin),
     .IF_to_ID_valid(IF_to_ID_valid),
     .ID_to_EXE_valid(ID_to_EXE_valid),
     .ID_allowin(ID_allowin),
     .ertn_flush(ertn_flush),
-    .wb_ex(wb_ex),
-    .ID_to_EXE_mul_div_op(ID_to_EXE_mul_div_op)
+    .wb_ex(wb_ex)
 );
 
 EXE_stage myEXE(
     .clk(clk),
     .resetn(resetn),
     .ID_to_EXE_BUS(ID_to_EXE_BUS),
+    .ID_to_EXE_mul_div_op(ID_to_EXE_mul_div_op),
     .EXE_to_MEM_BUS(EXE_to_MEM_BUS),
     .EXE_RF_BUS(EXE_RF_BUS),
     .csr_num(csr_rnum),
@@ -158,8 +159,7 @@ EXE_stage myEXE(
     .ertn_flush(ertn_flush),
     .wb_ex(wb_ex),
     .mem_ertn(mem_ertn),
-    .mem_ex(mem_ex),
-    .ID_to_EXE_mul_div_op(ID_to_EXE_mul_div_op)
+    .mem_ex(mem_ex)
 );
 
 MEM_stage myMEM(

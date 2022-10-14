@@ -3,10 +3,10 @@
 `define ID_to_EXE_LEN 260
 `define RF_BUS_LEN 38
 `define EXE_to_MEM_LEN 205
-`define MEM_to_WB_LEN 199
+`define MEM_to_WB_LEN 166
 `define EXE_RF_LEN 54
-`define MEM_RF_LEN 54
-`define WB_RF_LEN  38
+`define MEM_RF_LEN 53
+`define WB_RF_LEN  37
 `define DEST_LEN 5
 
 `define ST_W 7

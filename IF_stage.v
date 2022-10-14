@@ -37,6 +37,7 @@ wire [31:0] seq_pc;
 wire [31:0] nextpc;
 wire        preif_ex;
 wire [14:0] preif_ex_code;
+wire [31:0] preif_ex_vaddr;
 
 
 // IF to ID
@@ -44,8 +45,9 @@ reg  [31:0] if_pc;//fs_pc
 wire [31:0] if_inst;
 reg         if_ex;
 reg  [14:0] if_ex_code;
+reg  [31:0] if_ex_vaddr;
 
-assign IF_to_ID_BUS = {if_pc,if_inst,if_ex,if_ex_code};
+assign IF_to_ID_BUS = {if_pc,if_inst,if_ex,if_ex_code,if_ex_vaddr};
 
 
 // preIF
@@ -84,8 +86,15 @@ always @(posedge clk) begin
     end
 end
 
-// todo: assign preif_ex = ... preif_ex_code = ...
-assign preif_ex = 1'b0;
+
+// exception
+wire ex_adef;
+assign ex_adef = nextpc[1:0] != 2'b00;
+
+assign preif_ex         = ex_adef;
+assign preif_ex_code    = {15{ex_adef}} & {`ESUBCODE_ADEF, `ECODE_ADE};
+assign preif_ex_vaddr   = {32{ex_adef}} & nextpc;
+
 always @(posedge clk) begin
     if (~resetn) begin
         if_ex <= 1'b0;
@@ -96,7 +105,8 @@ end
 
 always @(posedge clk) begin
     if (validin && IF_allowin) begin
-        if_ex_code <= preif_ex_code;
+        if_ex_code  <= preif_ex_code;
+        if_ex_vaddr <= preif_ex_vaddr;
     end
 end
 
@@ -104,7 +114,7 @@ end
 // inst sram
 assign inst_sram_en    = validin && IF_allowin;
 assign inst_sram_we    = 4'b0;
-assign inst_sram_addr  = nextpc;
+assign inst_sram_addr  =  {nextpc[31:2],2'b00};
 assign inst_sram_wdata = 32'b0; 
 assign if_inst         = inst_sram_rdata;
 

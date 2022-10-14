@@ -12,6 +12,7 @@ module control_status_register(
     output wire [31: 0] csr_rvalue,
 
     input  wire [31: 0] wb_pc,
+    input  wire [31: 0] wb_vaddr,
     input  wire [ 7: 0] hw_int_in,
     input  wire         ipi_int_in,
     output wire [31: 0] ex_ra,
@@ -20,7 +21,10 @@ module control_status_register(
     input  wire         ertn_flush,
     input  wire         wb_ex,
     input  wire [ 5: 0] wb_ecode,
-    input  wire [ 8: 0] wb_esubcode
+    input  wire [ 8: 0] wb_esubcode,
+
+    output reg  [63: 0] stable_cnt,
+    output wire [31: 0] stable_cnt_tid
 );
 
 wire reset;
@@ -63,8 +67,26 @@ reg  [31:0] csr_save2_data;
 
 reg  [31:0] csr_save3_data;
 
+reg  [12:0] csr_ecfg_lie;
 
-// todo: finish this
+reg  [31:0] csr_badv_vaddr;
+
+reg  [31:0] csr_tid_tid;
+
+reg         csr_tcfg_en;
+reg         csr_tcfg_periodic;
+reg  [29:0] csr_tcfg_initval;
+
+//reg  [31:0]   csr_tval_timeval;
+
+wire        csr_ticlr_clr;
+
+// vaddr
+wire        wb_ex_addr_err;
+
+// timer counter
+wire [31:0] tcfg_next_value;
+wire [31:0] csr_tval;
 reg  [31:0] timer_cnt;
 
 always @(posedge clk) begin
@@ -180,7 +202,73 @@ always @(posedge clk) begin
     end
 end
 
+always @(posedge clk) begin
+    if (reset) begin
+        csr_ecfg_lie <= 13'b0;
+    end else if (csr_we && csr_wnum==`CSR_ECFG) begin
+        csr_ecfg_lie <= csr_wmask[`CSR_ECFG_LIE] & csr_wvalue[`CSR_ECFG_LIE]
+                     | ~csr_wmask[`CSR_ECFG_LIE] & csr_ecfg_lie;
+    end
+end
 
+assign wb_ex_addr_err = wb_ecode==`ECODE_ADE || wb_ecode==`ECODE_ALE;
+always @(posedge clk) begin
+    if (wb_ex && wb_ex_addr_err) begin
+        csr_badv_vaddr <= (wb_ecode==`ECODE_ADE && wb_esubcode==`ESUBCODE_ADEF) ? wb_pc : wb_vaddr;
+    end else if (csr_we && csr_wnum==`CSR_BADV) begin
+        csr_badv_vaddr <= csr_wmask[`CSR_BADV_VADDR] & csr_wvalue[`CSR_BADV_VADDR]
+                       | ~csr_wmask[`CSR_BADV_VADDR] & csr_badv_vaddr;
+    end
+end
+
+wire [ 8:0] coreid_in;
+assign coreid_in = 9'b0;
+always @(posedge clk) begin
+    if (reset) begin
+        csr_tid_tid <= coreid_in;
+    end else if (csr_we && csr_wnum==`CSR_TID) begin
+        csr_tid_tid <= csr_wmask[`CSR_TID_TID] & csr_wvalue[`CSR_TID_TID]
+                    | ~csr_wmask[`CSR_TID_TID] & csr_tid_tid;
+    end
+end
+
+always @(posedge clk) begin
+    if (reset) begin
+        csr_tcfg_en <= 1'b0;
+    end else if (csr_we && csr_wnum==`CSR_TCFG) begin
+        csr_tcfg_en <= csr_wmask[`CSR_TCFG_EN] & csr_wvalue[`CSR_TCFG_EN]
+                    | ~csr_wmask[`CSR_TCFG_EN] & csr_tcfg_en;
+    end
+    
+    if (csr_we && csr_wnum==`CSR_TCFG) begin
+        csr_tcfg_periodic <= csr_wmask[`CSR_TCFG_PERIODIC] & csr_wvalue[`CSR_TCFG_PERIODIC]
+                          | ~csr_wmask[`CSR_TCFG_PERIODIC] & csr_tcfg_periodic;
+        csr_tcfg_initval <= csr_wmask[`CSR_TCFG_INITVAL] & csr_wvalue[`CSR_TCFG_INITVAL]
+                         | ~csr_wmask[`CSR_TCFG_INITVAL] & csr_tcfg_initval;
+    end
+end
+
+assign tcfg_next_value = csr_wmask[31:0] & csr_wvalue[31:0]
+                      | ~csr_wmask[31:0] & {csr_tcfg_initval, csr_tcfg_periodic, csr_tcfg_en};
+always @(posedge clk) begin
+    if (reset) begin
+        timer_cnt <= 32'hffffffff;
+    end else if (csr_we && csr_wnum==`CSR_TCFG && tcfg_next_value[`CSR_TCFG_EN]) begin
+        timer_cnt <= {tcfg_next_value[`CSR_TCFG_INITVAL], 2'b0};
+    end else if (csr_tcfg_en && timer_cnt!=32'hffffffff) begin
+        if (timer_cnt[31:0]==32'b0 && csr_tcfg_periodic) begin
+            timer_cnt <= {csr_tcfg_initval, 2'b0};
+        end else begin
+            timer_cnt <= timer_cnt - 1'b1;
+        end
+    end
+end
+assign csr_tval = timer_cnt[31:0];
+
+assign csr_ticlr_clr = 1'b0;
+
+
+// csr read
 assign csr_rvalue = {32{csr_rnum==`CSR_CRMD}}   & {23'b0, csr_crmd_datm, csr_crmd_datf, csr_crmd_pg, csr_crmd_da, csr_crmd_ie, csr_crmd_plv}
                   | {32{csr_rnum==`CSR_PRMD}}   & {29'b0, csr_prmd_pie, csr_prmd_pplv}
                   | {32{csr_rnum==`CSR_ESTAT}}  & {1'b0, csr_estat_esubcode, csr_estat_ecode, 3'b0, csr_estat_is}
@@ -189,10 +277,30 @@ assign csr_rvalue = {32{csr_rnum==`CSR_CRMD}}   & {23'b0, csr_crmd_datm, csr_crm
                   | {32{csr_rnum==`CSR_SAVE0}}  & csr_save0_data
                   | {32{csr_rnum==`CSR_SAVE1}}  & csr_save1_data
                   | {32{csr_rnum==`CSR_SAVE2}}  & csr_save2_data
-                  | {32{csr_rnum==`CSR_SAVE3}}  & csr_save3_data;
+                  | {32{csr_rnum==`CSR_SAVE3}}  & csr_save3_data
+                  | {32{csr_rnum==`CSR_ECFG}}   & {19'b0, csr_ecfg_lie}
+                  | {32{csr_rnum==`CSR_BADV}}   & csr_badv_vaddr
+                  | {32{csr_rnum==`CSR_TID}}    & csr_tid_tid
+                  | {32{csr_rnum==`CSR_TCFG}}   & {csr_tcfg_initval, csr_tcfg_periodic, csr_tcfg_en}
+                  | {32{csr_rnum==`CSR_TVAL}}   & csr_tval
+                  | {32{csr_rnum==`CSR_TICLR}}  & {31'b0, csr_ticlr_clr};
 
 
+// exception
 assign ex_entry = {csr_eentry_va, 6'b0};
 assign ex_ra    = csr_era_pc;
+assign has_int  = ((csr_estat_is[11:0] & csr_ecfg_lie[11:0]) != 12'b0) && (csr_crmd_ie==1'b1);
+
+
+// stable counter
+assign stable_cnt_tid = csr_tid_tid;
+
+always @(posedge clk) begin
+    if (reset) begin
+        stable_cnt <= 32'h0;
+    end else begin
+        stable_cnt <= stable_cnt + 1'b1;
+    end
+end
 
 endmodule

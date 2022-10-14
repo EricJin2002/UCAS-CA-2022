@@ -1,11 +1,11 @@
 `define BR_BUS_LEN 34
-`define IF_to_ID_LEN 80
-`define ID_to_EXE_LEN 260
+`define IF_to_ID_LEN 112
+`define ID_to_EXE_LEN 295
 `define RF_BUS_LEN 38
-`define EXE_to_MEM_LEN 205
-`define MEM_to_WB_LEN 166
-`define EXE_RF_LEN 54
-`define MEM_RF_LEN 53
+`define EXE_to_MEM_LEN 238
+`define MEM_to_WB_LEN 199
+`define EXE_RF_LEN 55
+`define MEM_RF_LEN 54
 `define WB_RF_LEN  37
 `define DEST_LEN 5
 
@@ -99,6 +99,18 @@
 
 `define CSR_SAVE3_DATA  31:0
 
-//todo: finish this
-`define CSR_TICLR_CLR  0
-//`define CSR_TICLR_0    31:1
+`define CSR_ECFG_LIE    12:0
+//`define CSR_ECFG_0      31:13
+
+`define CSR_BADV_VADDR  31:0
+
+`define CSR_TID_TID     31:0
+
+`define CSR_TCFG_EN         0
+`define CSR_TCFG_PERIODIC   1
+`define CSR_TCFG_INITVAL    31:2
+
+`define CSR_TVAL_TIMEVAL    31:0
+
+`define CSR_TICLR_CLR   0
+//`define CSR_TICLR_0     31:1

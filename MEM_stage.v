@@ -68,8 +68,11 @@ wire         mem_ex_in;
 wire         mem_ex_out;
 wire [14: 0] mem_ex_code_in;
 wire [14: 0] mem_ex_code_out;
+wire [31: 0] mem_ex_vaddr_in;
+wire [31: 0] mem_ex_vaddr_out;
 wire         inst_ertn;
-assign {mem_pc,gr_we,dest,exe_result,data_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,mem_ex_in,mem_ex_code_in,inst_ertn} = EXE_to_MEM_BUS_temp;
+wire         rfrom_cntid;
+assign {mem_pc,gr_we,dest,exe_result,data_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,mem_ex_in,mem_ex_code_in,mem_ex_vaddr_in,inst_ertn,rfrom_cntid} = EXE_to_MEM_BUS_temp;
 
 
 // mem result
@@ -86,18 +89,19 @@ assign ms_final_result = rfrom_mem ? mem_result : exe_result;
 
 // operand forwarding
 // if MEM is invalid, MEM_dest is 0
-assign MEM_RF_BUS = {{`DEST_LEN{gr_we & MEM_valid}} & dest,ms_final_result,MEM_valid,csr_we,csr_num};
+assign MEM_RF_BUS = {{`DEST_LEN{gr_we & MEM_valid}} & dest,rfrom_cntid,ms_final_result,MEM_valid,csr_we,csr_num};
 
 
 // exception
-assign mem_ex_out = mem_ex_in;
-assign mem_ex_code_out = mem_ex_code_in;
+assign mem_ex_out       = mem_ex_in;
+assign mem_ex_code_out  = mem_ex_code_in;
+assign mem_ex_vaddr_out = mem_ex_vaddr_in;
 
 assign mem_ex = mem_ex_out && MEM_valid;
 assign mem_ertn = inst_ertn && MEM_valid;
 
 
 // MEM to WB
-assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,ms_final_result,csr_num,csr_we,csr_wvalue,csr_wmask,mem_ex_out,mem_ex_code_out,inst_ertn};
+assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,ms_final_result,csr_num,csr_we,csr_wvalue,csr_wmask,mem_ex_out,mem_ex_code_out,mem_ex_vaddr_out,inst_ertn,rfrom_cntid};
 
 endmodule

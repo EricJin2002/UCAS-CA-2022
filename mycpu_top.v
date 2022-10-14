@@ -88,6 +88,7 @@ wire [13: 0] csr_rnum;
 wire [31: 0] csr_rvalue;
 
 wire [31: 0] wb_pc;
+wire [31: 0] wb_vaddr;
 wire [ 7: 0] hw_int_in;
 wire         ipi_int_in;
 wire [31: 0] ex_entry;
@@ -100,6 +101,9 @@ wire [ 8: 0] wb_esubcode;
 
 wire         mem_ertn;
 wire         mem_ex;
+
+wire [63: 0] stable_cnt;
+wire [31: 0] stable_cnt_tid;
 
 IF_stage myIF(
     .clk(clk),
@@ -136,7 +140,8 @@ ID_stage myID(
     .ID_to_EXE_valid(ID_to_EXE_valid),
     .ID_allowin(ID_allowin),
     .ertn_flush(ertn_flush),
-    .wb_ex(wb_ex)
+    .wb_ex(wb_ex),
+    .has_int(has_int)
 );
 
 EXE_stage myEXE(
@@ -159,7 +164,8 @@ EXE_stage myEXE(
     .ertn_flush(ertn_flush),
     .wb_ex(wb_ex),
     .mem_ertn(mem_ertn),
-    .mem_ex(mem_ex)
+    .mem_ex(mem_ex),
+    .stable_cnt(stable_cnt)
 );
 
 MEM_stage myMEM(
@@ -187,6 +193,7 @@ WB_stage myWB(
     .csr_wvalue(csr_wvalue),
     .csr_wmask(csr_wmask),
     .wb_pc(wb_pc),
+    .wb_vaddr(wb_vaddr),
     .ertn_flush(ertn_flush),
     .wb_ex(wb_ex),
     .wb_ecode(wb_ecode),
@@ -199,7 +206,8 @@ WB_stage myWB(
     .RF_BUS(RF_BUS),
     .WB_RF_BUS(WB_RF_BUS),
     .MEM_to_WB_valid(MEM_to_WB_valid),
-    .WB_allowin(WB_allowin)
+    .WB_allowin(WB_allowin),
+    .stable_cnt_tid(stable_cnt_tid)
 );
 
 control_status_register myCSR(
@@ -212,6 +220,7 @@ control_status_register myCSR(
     .csr_rnum(csr_rnum),
     .csr_rvalue(csr_rvalue),
     .wb_pc(wb_pc),
+    .wb_vaddr(wb_vaddr),
     .hw_int_in(hw_int_in),
     .ipi_int_in(ipi_int_in),
     .ex_ra(ex_ra),
@@ -220,7 +229,9 @@ control_status_register myCSR(
     .ertn_flush(ertn_flush),
     .wb_ex(wb_ex),
     .wb_ecode(wb_ecode),
-    .wb_esubcode(wb_esubcode)
+    .wb_esubcode(wb_esubcode),
+    .stable_cnt(stable_cnt),
+    .stable_cnt_tid(stable_cnt_tid)
 );
 
 assign hw_int_in = 8'b0;

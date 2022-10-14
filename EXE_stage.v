@@ -25,7 +25,9 @@ module EXE_stage(
     input  wire        ertn_flush,
     input  wire        wb_ex,
     input  wire        mem_ertn,
-    input  wire        mem_ex
+    input  wire        mem_ex,
+
+    input  wire [63:0] stable_cnt
 );
 
 
@@ -77,8 +79,13 @@ wire         exe_ex_in;
 wire         exe_ex_out;
 wire [14: 0] exe_ex_code_in;
 wire [14: 0] exe_ex_code_out;
+wire [31: 0] exe_ex_vaddr_in;
+wire [31: 0] exe_ex_vaddr_out;
 wire         inst_ertn;
-assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_in,exe_ex_code_in,inst_ertn} = ID_to_EXE_BUS_temp;
+wire         rfrom_cntvl;
+wire         rfrom_cntvh;
+wire         rfrom_cntid;
+assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_in,exe_ex_code_in,exe_ex_vaddr_in,inst_ertn,rfrom_cntvl,rfrom_cntvh,rfrom_cntid} = ID_to_EXE_BUS_temp;
 //mul_div_op = {inst_mul_w,inst_mulh_w,inst_mulh_wu,inst_div_w,inst_mod_w,inst_div_wu,inst_mod_wu};
 
 
@@ -189,7 +196,9 @@ assign exe_result = {32{~rfrom_csr & mul_div_op[6]}}                    & mul_re
                   | {32{~rfrom_csr & mul_div_op[1]}}                    & div_result_unsigned[63:32]
                   | {32{~rfrom_csr & mul_div_op[0]}}                    & div_result_unsigned[31: 0]
                   | {32{~rfrom_csr &  ~|mul_div_op}}                    & alu_result
-                  | {32{rfrom_csr}}                                     & csr_rvalue;
+                  | {32{rfrom_csr}}                                     & csr_rvalue
+                  | {32{rfrom_cntvl}}                                   & stable_cnt[31: 0]
+                  | {32{rfrom_cntvh}}                                   & stable_cnt[63:32];
 
 
 // ready go
@@ -200,7 +209,7 @@ assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed
 
 // operand forwarding
 // if EXE is invalid, EXE_dest is 0
-assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,exe_result,EXE_valid,csr_we,csr_num};
+assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,rfrom_cntid,exe_result,EXE_valid,csr_we,csr_num};
 
 
 // data sram
@@ -225,14 +234,21 @@ assign data_sram_wdata = {32{store_load_op[`ST_B]}} & {4{mem_sum[ 7:0]}}
 
 
 // exception
-assign exe_ex_out = exe_ex_in;
-assign exe_ex_code_out = exe_ex_code_in;
+wire ex_ale;
+assign ex_ale = (store_load_op[`ST_W] || store_load_op[`LD_W])                          && alu_result[1:0]!=2'b00
+             || (store_load_op[`ST_H] || store_load_op[`LD_H] || store_load_op[`LD_HU]) && alu_result[0]!=1'b0;
+
+assign exe_ex_out       = exe_ex_in || ex_ale;
+assign exe_ex_code_out  = exe_ex_in ? exe_ex_code_in : 
+                          {15{ex_ale}} & {9'b0, `ECODE_ALE};
+assign exe_ex_vaddr_out = exe_ex_in ? exe_ex_vaddr_in :
+                          {32{ex_ale}} & alu_result;
 
 
 // EXE to MEM
 wire [4:0] load_op;
 assign load_op = store_load_op[4:0];
 
-assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_out,exe_ex_code_out,inst_ertn};
+assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_out,exe_ex_code_out,exe_ex_vaddr_out,inst_ertn,rfrom_cntid};
 
 endmodule

@@ -19,7 +19,8 @@ module ID_stage(
     output wire        ID_allowin,
     
     input  wire        ertn_flush,
-    input  wire        wb_ex
+    input  wire        wb_ex,
+    input  wire        has_int
 );
 
 
@@ -75,7 +76,9 @@ wire         id_ex_in;
 wire         id_ex_out;
 wire [14: 0] id_ex_code_in;
 wire [14: 0] id_ex_code_out;
-assign {id_pc,inst,id_ex_in,id_ex_code_in} = IF_to_ID_BUS_temp;
+wire [31: 0] id_ex_vaddr_in;
+wire [31: 0] id_ex_vaddr_out;
+assign {id_pc,inst,id_ex_in,id_ex_code_in,id_ex_vaddr_in} = IF_to_ID_BUS_temp;
 
 
 // WB to RF
@@ -93,6 +96,7 @@ wire        src1_is_pc;//check alu src1 PC bl/jrl
 wire        src2_is_imm;
 wire        src2_is_5_bit;
 wire        dst_is_r1;
+wire        dst_is_rj;
 wire        gr_we;
 wire        mem_en;
 wire        src_reg_is_rd;
@@ -180,6 +184,9 @@ wire        inst_csrxchg;
 wire        inst_ertn;
 wire        inst_syscall;
 wire        inst_break;
+wire        inst_rdcntid_w;
+wire        inst_rdcntvl_w;
+wire        inst_rdcntvh_w;
 
 wire        need_ui5;
 wire        need_ui12;
@@ -265,6 +272,9 @@ assign inst_csrxchg     = op_31_26_d[6'h01] & ~inst[25] & ~inst[24] & ~op_9_5_d[
 assign inst_ertn        = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h10] & (rk==5'b01110) & (rj==5'b00000) & (rd==5'b00000);
 assign inst_break       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h14];
 assign inst_syscall     = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h16];
+assign inst_rdcntid_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk==5'b11000) & (rd==5'b00000);
+assign inst_rdcntvl_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk==5'b11000) & op_9_5_d[5'h00];
+assign inst_rdcntvh_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk==5'b11001) & op_9_5_d[5'h00];
 
 assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu
                     | inst_st_w | inst_st_b | inst_st_h
@@ -303,7 +313,7 @@ assign imm = {32{src2_is_4}} & 32'h4                     |
 assign src_reg_is_rd  = inst_beq | inst_bne | inst_st_w | inst_st_b | inst_st_h | inst_blt | inst_bge | inst_bltu | inst_bgeu
                       | inst_csrrd | inst_csrwr | inst_csrxchg;
 assign src_reg_is_rk  = inst_add_w | inst_sub_w | inst_slt | inst_sltu | inst_and | inst_or | inst_nor | inst_xor | inst_sll | inst_srl | inst_sra | inst_mul_w | inst_mulh_w | inst_mulh_wu | inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;   
-assign src_reg_is_rj  = ~inst_b & ~inst_bl & ~inst_lu12i_w & ~inst_csrrd & ~inst_csrwr & ~inst_ertn & ~inst_break & ~inst_syscall;
+assign src_reg_is_rj  = ~inst_b & ~inst_bl & ~inst_lu12i_w & ~inst_csrrd & ~inst_csrwr & ~inst_ertn & ~inst_break & ~inst_syscall & ~inst_rdcntid_w & ~inst_rdcntvl_w & ~inst_rdcntvh_w;
 assign src_reg_is_rkd = src_reg_is_rd | src_reg_is_rk;
 assign rkd = {5{src_reg_is_rk}} & rk |
              {5{src_reg_is_rd}} & rd ;
@@ -339,9 +349,12 @@ assign src2_is_5_bit=  inst_sll         |
 assign store_load_op = {inst_st_w, inst_st_b, inst_st_h, inst_ld_w, inst_ld_b, inst_ld_h, inst_ld_bu, inst_ld_hu};
 assign rfrom_mem     = inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu;
 assign dst_is_r1     = inst_bl;
+assign dst_is_rj     = inst_rdcntid_w;
 assign gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu & ~inst_ertn & ~inst_break & ~inst_syscall;
 assign mem_en        = inst_st_w | inst_st_b | inst_st_h;
-assign dest          = dst_is_r1 ? 5'd1 : rd;
+assign dest          = {5{dst_is_r1}}                & 5'b1
+                     | {5{dst_is_rj}}                & rj
+                     | {5{!dst_is_r1 && !dst_is_rj}} & rd; 
 
 
 // csr
@@ -408,25 +421,99 @@ assign BR_BUS = {br_target,br_taken,br_taken_cancel};
 
 
 // exception
-assign id_ex_out        = id_ex_in || inst_syscall || inst_break;
-assign id_ex_code_out   = id_ex_in ? id_ex_code_in : 
-                          {32{inst_syscall}} & {9'b0, `ECODE_SYS} 
-                        | {32{inst_break  }} & {9'b0, `ECODE_BRK};
+wire ex_ine;
+assign ex_ine = !(
+       inst_add_w
+    || inst_sub_w
+    || inst_slt
+    || inst_sltu
+    || inst_slti
+    || inst_sltui
+    || inst_nor
+    || inst_and
+    || inst_or
+    || inst_xor
+    || inst_andi
+    || inst_ori
+    || inst_xori
+    || inst_slli_w
+    || inst_srli_w
+    || inst_srai_w
+    || inst_sll
+    || inst_srl
+    || inst_sra
+    || inst_addi_w
+    || inst_ld_w
+    || inst_ld_b
+    || inst_ld_h
+    || inst_ld_bu
+    || inst_ld_hu
+    || inst_st_w
+    || inst_st_b
+    || inst_st_h
+    || inst_jirl
+    || inst_b
+    || inst_bl
+    || inst_beq
+    || inst_bne
+    || inst_blt
+    || inst_bge
+    || inst_bltu
+    || inst_bgeu
+    || inst_lu12i_w
+    || inst_pcaddu12i
+    || inst_mul_w
+    || inst_mulh_w
+    || inst_mulh_wu
+    || inst_div_w
+    || inst_mod_w
+    || inst_div_wu
+    || inst_mod_wu
+    || inst_csrrd
+    || inst_csrwr
+    || inst_csrxchg
+    || inst_ertn
+    || inst_break
+    || inst_syscall
+    || inst_rdcntid_w
+    || inst_rdcntvl_w
+    || inst_rdcntvh_w
+);
+
+// we assum that has_int has the highest priority among all exceptions
+assign id_ex_out        = id_ex_in || inst_syscall || inst_break || ex_ine || has_int;
+assign id_ex_code_out   = has_int            ? {9'b0, `ECODE_INT}
+                        : id_ex_in           ? id_ex_code_in
+                        : {15{inst_syscall}} & {9'b0, `ECODE_SYS} 
+                        | {15{inst_break  }} & {9'b0, `ECODE_BRK}
+                        | {15{ex_ine      }} & {9'b0, `ECODE_INE};
+assign id_ex_vaddr_out  = id_ex_vaddr_in;
+
+
+// stable counter
+wire rfrom_cntvl;
+wire rfrom_cntvh;
+wire rfrom_cntid;
+assign rfrom_cntvl = inst_rdcntvl_w;
+assign rfrom_cntvh = inst_rdcntvh_w;
+assign rfrom_cntid = inst_rdcntid_w;
 
 
 // ID to EXE
-assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,id_ex_out,id_ex_code_out,inst_ertn};
+assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,id_ex_out,id_ex_code_out,id_ex_vaddr_out,inst_ertn,rfrom_cntvl,rfrom_cntvh,rfrom_cntid};
 
 
 // ready go & bypass
 wire [ 4: 0] EXE_dest;
 wire         EXE_rfrom_mem;
+wire         EXE_rfrom_cntid;
 wire [31: 0] EXE_result;
 wire         EXE_valid;
 wire         EXE_csr_we;
 wire [13: 0] EXE_csr_num;
 
 wire [ 4: 0] MEM_dest;
+wire         MEM_rfrom_cntid;
 wire [31: 0] MEM_result;
 wire         MEM_valid;
 wire         MEM_csr_we;
@@ -435,16 +522,22 @@ wire [13: 0] MEM_csr_num;
 wire [ 4: 0] WB_dest ;
 wire [31: 0] WB_result;
 
-assign {EXE_dest,EXE_rfrom_mem,EXE_result,EXE_valid,EXE_csr_we,EXE_csr_num} = EXE_RF_BUS;
-assign {MEM_dest,              MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
-assign {WB_dest ,              WB_result                                  } = WB_RF_BUS ;
+assign {EXE_dest,EXE_rfrom_mem,EXE_rfrom_cntid,EXE_result,EXE_valid,EXE_csr_we,EXE_csr_num} = EXE_RF_BUS;
+assign {MEM_dest,              MEM_rfrom_cntid,MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
+assign {WB_dest ,                              WB_result                                  } = WB_RF_BUS ;
 
 wire check_rj;
 wire check_rkd;
 wire check_csr;
 
-assign check_rj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(rj ==EXE_dest && EXE_rfrom_mem) : 1;
-assign check_rkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(rkd==EXE_dest && EXE_rfrom_mem) : 1;
+assign check_rj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(
+    rj==EXE_dest && (EXE_rfrom_mem||EXE_rfrom_cntid) ||
+    rj==MEM_dest && MEM_rfrom_cntid
+) : 1;
+assign check_rkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(
+    rkd==EXE_dest && (EXE_rfrom_mem||EXE_rfrom_cntid) ||
+    rkd==MEM_dest && MEM_rfrom_cntid
+) : 1;
 assign check_csr = rfrom_csr ? ~(EXE_csr_we && EXE_valid && EXE_csr_num==csr_num || MEM_csr_we && MEM_valid && MEM_csr_num==csr_num) : 1;
 assign ID_ready_go = check_rj && check_rkd && check_csr || wb_ex || ertn_flush;
 

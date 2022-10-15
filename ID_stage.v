@@ -506,6 +506,7 @@ assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_sr
 // ready go & bypass
 wire [ 4: 0] EXE_dest;
 wire         EXE_rfrom_mem;
+wire         EXE_rfrom_mul;
 wire         EXE_rfrom_cntid;
 wire [31: 0] EXE_result;
 wire         EXE_valid;
@@ -522,20 +523,20 @@ wire [13: 0] MEM_csr_num;
 wire [ 4: 0] WB_dest ;
 wire [31: 0] WB_result;
 
-assign {EXE_dest,EXE_rfrom_mem,EXE_rfrom_cntid,EXE_result,EXE_valid,EXE_csr_we,EXE_csr_num} = EXE_RF_BUS;
-assign {MEM_dest,              MEM_rfrom_cntid,MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
-assign {WB_dest ,                              WB_result                                  } = WB_RF_BUS ;
+assign {EXE_dest,EXE_rfrom_mem,EXE_rfrom_mul,EXE_rfrom_cntid,EXE_result,EXE_valid,EXE_csr_we,EXE_csr_num} = EXE_RF_BUS;
+assign {MEM_dest,                            MEM_rfrom_cntid,MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
+assign {WB_dest ,                                            WB_result                                  } = WB_RF_BUS ;
 
 wire check_rj;
 wire check_rkd;
 wire check_csr;
 
 assign check_rj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(
-    rj==EXE_dest && (EXE_rfrom_mem||EXE_rfrom_cntid) ||
+    rj==EXE_dest && (EXE_rfrom_mem||EXE_rfrom_mul||EXE_rfrom_cntid) ||
     rj==MEM_dest && MEM_rfrom_cntid
 ) : 1;
 assign check_rkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(
-    rkd==EXE_dest && (EXE_rfrom_mem||EXE_rfrom_cntid) ||
+    rkd==EXE_dest && (EXE_rfrom_mem||EXE_rfrom_mul||EXE_rfrom_cntid) ||
     rkd==MEM_dest && MEM_rfrom_cntid
 ) : 1;
 assign check_csr = rfrom_csr ? ~(EXE_csr_we && EXE_valid && EXE_csr_num==csr_num || MEM_csr_we && MEM_valid && MEM_csr_num==csr_num) : 1;

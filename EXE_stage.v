@@ -186,12 +186,16 @@ assign mul_result = $signed({mul_is_signed & alu_src1[31], alu_src1}) * $signed(
 //     .z  (mul_result_2)
 // );
 
+wire rfrom_mul;
+assign rfrom_mul = mul_div_op[6] || mul_div_op[5] || mul_div_op[4];
+
 
 // exe result
 wire [31: 0] exe_result;
-assign exe_result = {32{~rfrom_csr & mul_div_op[6]}}                    & mul_result[31: 0]
+assign exe_result = /* {32{~rfrom_csr & mul_div_op[6]}}                    & mul_result[31: 0]
                   | {32{~rfrom_csr & (mul_div_op[5] | mul_div_op[4])}}  & mul_result[63:32]
-                  | {32{~rfrom_csr & mul_div_op[3]}}                    & div_result_signed[63:32]
+                  |*/ 
+                    {32{~rfrom_csr & mul_div_op[3]}}                    & div_result_signed[63:32]
                   | {32{~rfrom_csr & mul_div_op[2]}}                    & div_result_signed[31: 0]
                   | {32{~rfrom_csr & mul_div_op[1]}}                    & div_result_unsigned[63:32]
                   | {32{~rfrom_csr & mul_div_op[0]}}                    & div_result_unsigned[31: 0]
@@ -209,7 +213,7 @@ assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed
 
 // operand forwarding
 // if EXE is invalid, EXE_dest is 0
-assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,rfrom_cntid,exe_result,EXE_valid,csr_we,csr_num};
+assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,rfrom_mul,rfrom_cntid,exe_result,EXE_valid,csr_we,csr_num};
 
 
 // data sram
@@ -249,6 +253,6 @@ assign exe_ex_vaddr_out = exe_ex_in ? exe_ex_vaddr_in :
 wire [4:0] load_op;
 assign load_op = store_load_op[4:0];
 
-assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_out,exe_ex_code_out,exe_ex_vaddr_out,inst_ertn,rfrom_cntid};
+assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_out,exe_ex_code_out,exe_ex_vaddr_out,inst_ertn,rfrom_cntid,mul_result[63:0],mul_div_op};
 
 endmodule

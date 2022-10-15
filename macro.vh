@@ -2,9 +2,9 @@
 `define IF_to_ID_LEN 112
 `define ID_to_EXE_LEN 295
 `define RF_BUS_LEN 38
-`define EXE_to_MEM_LEN 238
+`define EXE_to_MEM_LEN 309
 `define MEM_to_WB_LEN 199
-`define EXE_RF_LEN 55
+`define EXE_RF_LEN 56
 `define MEM_RF_LEN 54
 `define WB_RF_LEN  37
 `define DEST_LEN 5

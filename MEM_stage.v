@@ -72,19 +72,28 @@ wire [31: 0] mem_ex_vaddr_in;
 wire [31: 0] mem_ex_vaddr_out;
 wire         inst_ertn;
 wire         rfrom_cntid;
-assign {mem_pc,gr_we,dest,exe_result,data_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,mem_ex_in,mem_ex_code_in,mem_ex_vaddr_in,inst_ertn,rfrom_cntid} = EXE_to_MEM_BUS_temp;
+wire [63: 0] mul_result;
+wire [ 6: 0] mul_div_op;
+assign {mem_pc,gr_we,dest,exe_result,data_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,mem_ex_in,mem_ex_code_in,mem_ex_vaddr_in,inst_ertn,rfrom_cntid,mul_result,mul_div_op} = EXE_to_MEM_BUS_temp;
 
 
 // mem result
 wire [31: 0] mem_result_shift;
 wire [31: 0] mem_result;
-assign mem_result_shift = data_sram_rdata>>({3'b0, exe_result[1:0]}<<3);
+assign mem_result_shift = data_sram_rdata>>{exe_result[1:0], 3'b0};
+// assign mem_result_shift = {32{ exe_result[1] &&  exe_result[0]}} & {24'b0, data_sram_rdata[31:24]}
+//                         | {32{ exe_result[1] && ~exe_result[0]}} & {16'b0, data_sram_rdata[31:16]}
+//                         | {32{~exe_result[1] &&  exe_result[0]}} & { 8'b0, data_sram_rdata[31: 8]}
+//                         | {32{~exe_result[1] && ~exe_result[0]}} & {       data_sram_rdata[31: 0]};
 assign mem_result       = {32{load_op[`LD_B] || load_op[`LD_BU]}} & {{24{load_op[`LD_B] && mem_result_shift[7]}}, mem_result_shift[7:0]}
                         | {32{load_op[`LD_H] || load_op[`LD_HU]}} & {{16{load_op[`LD_H] && mem_result_shift[15]}}, mem_result_shift[15:0]}
                         | {32{load_op[`LD_W]}} & mem_result_shift;
 
 wire [31: 0] ms_final_result;
-assign ms_final_result = rfrom_mem ? mem_result : exe_result;
+assign ms_final_result = {32{rfrom_mem}}                                                        & mem_result
+                       | {32{mul_div_op[6]}}                                                    & mul_result[31: 0]
+                       | {32{mul_div_op[5] || mul_div_op[4]}}                                   & mul_result[63:32]
+                       | {32{!rfrom_mem && !mul_div_op[6] && !mul_div_op[5] && !mul_div_op[4]}} & exe_result;                   
 
 
 // operand forwarding

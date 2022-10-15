@@ -93,7 +93,7 @@ assign ex_adef = nextpc[1:0] != 2'b00;
 
 assign preif_ex         = ex_adef;
 assign preif_ex_code    = {15{ex_adef}} & {`ESUBCODE_ADEF, `ECODE_ADE};
-assign preif_ex_vaddr   = {32{ex_adef}} & nextpc;
+assign preif_ex_vaddr   = /*{32{ex_adef}} &*/ nextpc;
 
 always @(posedge clk) begin
     if (~resetn) begin

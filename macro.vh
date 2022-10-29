@@ -1,4 +1,5 @@
 `define BR_BUS_LEN 34
+`define preIF_to_IF_LEN 112
 `define IF_to_ID_LEN 112
 `define ID_to_EXE_LEN 295
 `define RF_BUS_LEN 38
@@ -114,3 +115,11 @@
 
 `define CSR_TICLR_CLR   0
 //`define CSR_TICLR_0     31:1
+
+`define preIF_INIT 2'b01
+`define preIF_BLOCKED 2'b10
+
+`define IF_INIT 4'b0001
+`define IF_BLOCKED1 4'b0010
+`define IF_BLOCKED2 4'b0100 
+`define IF_CANCEL 4'b1000    

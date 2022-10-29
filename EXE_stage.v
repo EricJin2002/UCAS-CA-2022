@@ -13,7 +13,7 @@ module EXE_stage(
     input  wire [31: 0] csr_rvalue,
     // data sram interface
     output wire        data_sram_en,     
-    output wire [ 3:0] data_sram_we,
+    output wire [ 3:0] data_sram_wstrb,
     output wire [31:0] data_sram_addr,
     output wire [31:0] data_sram_wdata,
     
@@ -228,7 +228,7 @@ assign mask = {
     ~alu_result[1] & ~alu_result[0]
 };
 
-assign data_sram_we    = {4{store_load_op[`ST_W]}} & 4'b1111
+assign data_sram_wstrb = {4{store_load_op[`ST_W]}} & 4'b1111
                        | {4{store_load_op[`ST_H]}} & {{2{mask[2]}}, {2{mask[0]}}}
                        | {4{store_load_op[`ST_B]}} & mask;
 assign data_sram_addr  = {alu_result[31:2], 2'b0};

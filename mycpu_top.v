@@ -3,18 +3,33 @@
 module mycpu_top(
     input  wire        clk,
     input  wire        resetn,
+    
     // inst sram interface
-    output wire        inst_sram_en,//片选信号
-    output wire [ 3:0] inst_sram_we,//字节写使能
+    output wire        inst_sram_req,
+    output wire        inst_sram_wr,
+    output wire [ 1:0] inst_sram_size,
+    output wire [ 3:0] inst_sram_wstrb,
     output wire [31:0] inst_sram_addr,
     output wire [31:0] inst_sram_wdata,
+    input  wire        inst_sram_addr_ok,
+    input  wire        inst_sram_data_ok,
     input  wire [31:0] inst_sram_rdata,
+    // output wire        inst_sram_en,//片选信号
+    // output wire [ 3:0] inst_sram_we,//字节写使能
+
     // data sram interface
-    output wire        data_sram_en,     
-    output wire [ 3:0] data_sram_we,
+    output wire        data_sram_req,
+    output wire        data_sram_wr,
+    output wire [ 1:0] data_sram_size,
+    output wire [ 3:0] data_sram_wstrb,
     output wire [31:0] data_sram_addr,
     output wire [31:0] data_sram_wdata,
+    input  wire        data_sram_addr_ok,
+    input  wire        data_sram_data_ok,
     input  wire [31:0] data_sram_rdata,
+    // output wire        data_sram_en,     
+    // output wire [ 3:0] data_sram_we,
+    
     // trace debug interface
     output wire [31:0] debug_wb_pc,
     output wire [ 3:0] debug_wb_rf_we,
@@ -30,7 +45,7 @@ pipe5 WB
 */
 
 //allowin 第X级传递给第X-1级的信号，值为1表示下一时钟X级流水线可以更新X-1级流水线的数据
-wire IF_allowin;
+wire preIF_allowin;
 wire ID_allowin;
 wire EXE_allowin;
 wire MEM_allowin;
@@ -105,23 +120,40 @@ wire         mem_ex;
 wire [63: 0] stable_cnt;
 wire [31: 0] stable_cnt_tid;
 
+reg  [ 3: 0] IO_cnt;
+always @(posedge clk)begin
+    if(~resetn)begin
+        IO_cnt <= 4'b0;
+    end else begin
+        if(inst_sram_addr_ok && ~inst_sram_data_ok) begin
+            IO_cnt <= IO_cnt + 1;
+        end else if( ~inst_sram_addr_ok && inst_sram_data_ok)
+                    IO_cnt <= IO_cnt - 1;
+                else
+                    IO_cnt <= IO_cnt;
+        end
+end
 IF_stage myIF(
-    .clk(clk),
-    .resetn(resetn),
-    .inst_sram_en(inst_sram_en),
-    .inst_sram_we(inst_sram_we),
-    .inst_sram_addr(inst_sram_addr),
-    .inst_sram_wdata(inst_sram_wdata),
-    .inst_sram_rdata(inst_sram_rdata),
-    .BR_BUS(BR_BUS),
-    .IF_to_ID_BUS(IF_to_ID_BUS),
-    .ID_allowin(ID_allowin),
-    .IF_to_ID_valid(IF_to_ID_valid),
-    .IF_allowin(IF_allowin),
-    .ertn_flush(ertn_flush),
-    .wb_ex(wb_ex),
-    .ex_ra(ex_ra),
-    .ex_entry(ex_entry)
+    // .clk(clk),
+    // .resetn(resetn),
+    // .inst_sram_req(inst_sram_req),
+    // .inst_sram_wr(inst_sram_wr),
+    // .inst_sram_size(inst_sram_size),
+    // .inst_sram_wstrb(inst_sram_wstrb),
+    // .inst_sram_addr(inst_sram_addr),
+    // .inst_sram_wdata(inst_sram_wdata),
+    // .inst_sram_addr_ok(inst_sram_addr_ok),
+    // .inst_sram_data_ok(inst_sram_data_ok),
+    // .inst_sram_rdata(inst_sram_rdata),
+    // .BR_BUS(BR_BUS),
+    // .IF_to_ID_BUS(IF_to_ID_BUS),
+    // .ID_allowin(ID_allowin),
+    // .IF_to_ID_valid(IF_to_ID_valid),
+    // .preIF_allowin(preIF_allowin),
+    // .ertn_flush(ertn_flush),
+    // .wb_ex(wb_ex),
+    // .ex_ra(ex_ra),
+    // .ex_entry(ex_entry)
 );
 
 ID_stage myID(
@@ -154,7 +186,7 @@ EXE_stage myEXE(
     .csr_num(csr_rnum),
     .csr_rvalue(csr_rvalue),
     .data_sram_en(data_sram_en),
-    .data_sram_we(data_sram_we),
+    .data_sram_wstrb(data_sram_wstrb),
     .data_sram_addr(data_sram_addr),
     .data_sram_wdata(data_sram_wdata),
     .ID_to_EXE_valid(ID_to_EXE_valid),

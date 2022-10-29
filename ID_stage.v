@@ -514,6 +514,7 @@ wire         EXE_csr_we;
 wire [13: 0] EXE_csr_num;
 
 wire [ 4: 0] MEM_dest;
+wire         MEM_to_WB_valid;
 wire         MEM_rfrom_cntid;
 wire [31: 0] MEM_result;
 wire         MEM_valid;
@@ -524,7 +525,7 @@ wire [ 4: 0] WB_dest ;
 wire [31: 0] WB_result;
 
 assign {EXE_dest,EXE_rfrom_mem,EXE_rfrom_mul,EXE_rfrom_cntid,EXE_result,EXE_valid,EXE_csr_we,EXE_csr_num} = EXE_RF_BUS;
-assign {MEM_dest,                            MEM_rfrom_cntid,MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
+assign {MEM_dest,MEM_to_WB_valid,            MEM_rfrom_cntid,MEM_result,MEM_valid,MEM_csr_we,MEM_csr_num} = MEM_RF_BUS;
 assign {WB_dest ,                                            WB_result                                  } = WB_RF_BUS ;
 
 wire check_rj;
@@ -533,11 +534,11 @@ wire check_csr;
 
 assign check_rj  = (src_reg_is_rj  && (rj  != 5'b00000)) ? ~(
     rj==EXE_dest && (EXE_rfrom_mem||EXE_rfrom_mul||EXE_rfrom_cntid) ||
-    rj==MEM_dest && MEM_rfrom_cntid
+    rj==MEM_dest && (MEM_rfrom_cntid || !MEM_to_WB_valid)
 ) : 1;
 assign check_rkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(
     rkd==EXE_dest && (EXE_rfrom_mem||EXE_rfrom_mul||EXE_rfrom_cntid) ||
-    rkd==MEM_dest && MEM_rfrom_cntid
+    rkd==MEM_dest && (MEM_rfrom_cntid || !MEM_to_WB_valid)
 ) : 1;
 assign check_csr = rfrom_csr ? ~(EXE_csr_we && EXE_valid && EXE_csr_num==csr_num || MEM_csr_we && MEM_valid && MEM_csr_num==csr_num) : 1;
 assign ID_ready_go = check_rj && check_rkd && check_csr || wb_ex || ertn_flush;

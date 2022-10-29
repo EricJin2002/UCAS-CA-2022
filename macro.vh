@@ -3,10 +3,10 @@
 `define IF_to_ID_LEN 112
 `define ID_to_EXE_LEN 295
 `define RF_BUS_LEN 38
-`define EXE_to_MEM_LEN 309
+`define EXE_to_MEM_LEN 310
 `define MEM_to_WB_LEN 199
 `define EXE_RF_LEN 56
-`define MEM_RF_LEN 54
+`define MEM_RF_LEN 55
 `define WB_RF_LEN  37
 `define DEST_LEN 5
 
@@ -123,3 +123,8 @@
 `define IF_BLOCKED1 4'b0010
 `define IF_BLOCKED2 4'b0100 
 `define IF_CANCEL 4'b1000    
+
+`define MEM_INIT 4'b0001
+`define MEM_BLOCKED1 4'b0010
+`define MEM_BLOCKED2 4'b0100
+`define MEM_CANCEL 4'b1000

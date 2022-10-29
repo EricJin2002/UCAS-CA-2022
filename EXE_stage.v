@@ -12,10 +12,14 @@ module EXE_stage(
     output wire [13: 0] csr_num,
     input  wire [31: 0] csr_rvalue,
     // data sram interface
-    output wire        data_sram_en,     
+    // output wire        data_sram_en,     
+    output wire        data_sram_req,
+    output wire        data_sram_wr,
+    output wire [ 1:0] data_sram_size,
     output wire [ 3:0] data_sram_wstrb,
     output wire [31:0] data_sram_addr,
     output wire [31:0] data_sram_wdata,
+    output wire        data_sram_addr_ok,
     
     input  wire ID_to_EXE_valid,
     input  wire MEM_allowin,
@@ -208,7 +212,9 @@ assign exe_result = /* {32{~rfrom_csr & mul_div_op[6]}}                    & mul
 // ready go
 assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed 
                    || (mul_div_op[1] || mul_div_op[0]) && div_dout_valid_unsigned
-                   || !(mul_div_op[3] || mul_div_op[2] || mul_div_op[1] || mul_div_op[0]);
+                   || (|store_load_op) && data_sram_req && data_sram_addr_ok
+                   || !(mul_div_op[3] || mul_div_op[2] || mul_div_op[1] || mul_div_op[0] || (|store_load_op))
+                   || exe_ex_out;
 
 
 // operand forwarding
@@ -217,7 +223,11 @@ assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,rfrom_mul,r
 
 
 // data sram
-assign data_sram_en    = (rfrom_mem || mem_en) && EXE_valid && 
+// assign data_sram_en    = (rfrom_mem || mem_en) && EXE_valid && 
+//                         !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush);
+
+
+assign data_sram_req   = (rfrom_mem || mem_en) && EXE_valid && MEM_allowin && resetn &&
                         !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush);
 
 wire [3:0] mask;
@@ -231,10 +241,14 @@ assign mask = {
 assign data_sram_wstrb = {4{store_load_op[`ST_W]}} & 4'b1111
                        | {4{store_load_op[`ST_H]}} & {{2{mask[2]}}, {2{mask[0]}}}
                        | {4{store_load_op[`ST_B]}} & mask;
-assign data_sram_addr  = {alu_result[31:2], 2'b0};
+assign data_sram_addr  = alu_result;// {alu_result[31:2], 2'b0};
 assign data_sram_wdata = {32{store_load_op[`ST_B]}} & {4{mem_sum[ 7:0]}} 
                        | {32{store_load_op[`ST_H]}} & {2{mem_sum[15:0]}}
                        | {32{store_load_op[`ST_W]}} & mem_sum[31:0];
+assign data_sram_wr    = store_load_op[`ST_W] || store_load_op[`ST_H] || store_load_op[`ST_B];
+assign data_sram_size  = {2{store_load_op[`LD_W] ||                          store_load_op[`ST_W]}} & 2'b10
+                       | {2{store_load_op[`LD_H] || store_load_op[`LD_HU] || store_load_op[`ST_H]}} & 2'b01
+                       | {2{store_load_op[`LD_B] || store_load_op[`LD_BU] || store_load_op[`ST_B]}} & 2'b00;
 
 
 // exception
@@ -253,6 +267,9 @@ assign exe_ex_vaddr_out = exe_ex_in ? exe_ex_vaddr_in :
 wire [4:0] load_op;
 assign load_op = store_load_op[4:0];
 
-assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_out,exe_ex_code_out,exe_ex_vaddr_out,inst_ertn,rfrom_cntid,mul_result[63:0],mul_div_op};
+wire wait_store_ok;
+assign wait_store_ok = store_load_op[`ST_B] || store_load_op[`ST_H] || store_load_op[`ST_W];
+
+assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_out,exe_ex_code_out,exe_ex_vaddr_out,inst_ertn,rfrom_cntid,mul_result[63:0],mul_div_op,wait_store_ok};
 
 endmodule

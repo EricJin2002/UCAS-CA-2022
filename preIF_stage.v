@@ -52,41 +52,41 @@ always @(posedge clk) begin
 end
 
 
-// fsm
-reg  [1:0] current_state;
-reg  [1:0] next_state;
-
-always @(posedge clk) begin
-    if (~resetn) begin
-        current_state <= `preIF_INIT;
-    end else begin
-        current_state <= next_state;
-    end
-end
-
-always @(*) begin
-    if (~resetn) begin
-        next_state <= `preIF_INIT;
-    end else begin
-        case (current_state)
-            `preIF_INIT: begin
-                if (inst_sram_addr_ok && !IF_allowin) begin // fixme: addr ok will randomly send 
-                    next_state <= `preIF_BLOCKED;
-                end else begin
-                    next_state <= `preIF_INIT;
-                end
-            end
-            `preIF_BLOCKED: begin
-                if (IF_allowin) begin
-                    next_state <= `preIF_INIT;
-                end else begin
-                    next_state <= `preIF_BLOCKED;
-                end
-                
-            end
-        endcase
-    end
-end
+// // fsm
+// reg  [1:0] current_state;
+// reg  [1:0] next_state;
+// 
+// always @(posedge clk) begin
+//     if (~resetn) begin
+//         current_state <= `preIF_INIT;
+//     end else begin
+//         current_state <= next_state;
+//     end
+// end
+// 
+// always @(*) begin
+//     if (~resetn) begin
+//         next_state <= `preIF_INIT;
+//     end else begin
+//         case (current_state)
+//             `preIF_INIT: begin
+//                 if (inst_sram_addr_ok && !IF_allowin) begin // fixme: addr ok will randomly send 
+//                     next_state <= `preIF_BLOCKED;
+//                 end else begin
+//                     next_state <= `preIF_INIT;
+//                 end
+//             end
+//             `preIF_BLOCKED: begin
+//                 if (IF_allowin) begin
+//                     next_state <= `preIF_INIT;
+//                 end else begin
+//                     next_state <= `preIF_BLOCKED;
+//                 end
+//                 
+//             end
+//         endcase
+//     end
+// end
 
 
 // preIF

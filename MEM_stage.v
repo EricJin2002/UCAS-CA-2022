@@ -4,7 +4,7 @@ module MEM_stage(
     input  wire        clk,
     input  wire        resetn,
     // data sram interface
-    input wire         data_sram_data_ok,
+    input  wire        data_sram_data_ok,
     input  wire [31:0] data_sram_rdata,
     // BUS
     input  wire [`EXE_to_MEM_LEN - 1: 0] EXE_to_MEM_BUS,
@@ -93,7 +93,7 @@ end
 
 always @(*) begin
     if (~resetn) begin
-        current_state <= `MEM_INIT;
+        next_state <= `MEM_INIT;
     end else begin
         case (current_state)
             `MEM_INIT : begin

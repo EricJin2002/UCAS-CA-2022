@@ -19,7 +19,7 @@ module EXE_stage(
     output wire [ 3:0] data_sram_wstrb,
     output wire [31:0] data_sram_addr,
     output wire [31:0] data_sram_wdata,
-    output wire        data_sram_addr_ok,
+    input  wire        data_sram_addr_ok,
     
     input  wire ID_to_EXE_valid,
     input  wire MEM_allowin,

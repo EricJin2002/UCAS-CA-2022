@@ -49,7 +49,7 @@ end
 
 always @(*) begin
     if (~resetn) begin
-        current_state <= `IF_INIT;
+        next_state <= `IF_INIT;
     end else begin
         case (current_state)
             `IF_INIT : begin
@@ -148,17 +148,11 @@ always @(posedge clk) begin
         if_ex_out <= 1'b0;
     end else if (preIF_to_IF_valid && IF_allowin) begin
         if_ex_out <= if_ex_in;
-    end
-end
-
-always @(posedge clk) begin
-    if (~resetn) begin
-        if_ex_out <= 1'b0;
-    end else if (preIF_to_IF_valid && IF_allowin) begin
         if_ex_code_out  <= if_ex_code_in;
         if_ex_vaddr_out <= if_ex_vaddr_in;
     end
 end
+
 
 always @(posedge clk) begin
     if(~resetn) begin

@@ -128,3 +128,11 @@
 `define MEM_BLOCKED1 4'b0010
 `define MEM_BLOCKED2 4'b0100
 `define MEM_CANCEL 4'b1000
+
+`define AR_INIT 2'b00
+`define AR_WAIT 2'b01
+
+`define AW_W_INIT 2'b00
+`define AW_W_WAIT 2'b01
+`define AW_W_WAIT_W 2'b10
+`define AW_W_WAIT_AW 2'b11

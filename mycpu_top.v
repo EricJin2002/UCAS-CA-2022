@@ -1,41 +1,309 @@
 `include "macro.vh"
 
 module mycpu_top(
-    input  wire        clk,
-    input  wire        resetn,
-    
-    // inst sram interface
-    output wire        inst_sram_req,
-    output wire        inst_sram_wr,
-    output wire [ 1:0] inst_sram_size,
-    output wire [ 3:0] inst_sram_wstrb,
-    output wire [31:0] inst_sram_addr,
-    output wire [31:0] inst_sram_wdata,
-    input  wire        inst_sram_addr_ok,
-    input  wire        inst_sram_data_ok,
-    input  wire [31:0] inst_sram_rdata,
-    // output wire        inst_sram_en,//片选信号
-    // output wire [ 3:0] inst_sram_we,//字节写使能
+    input  wire        aclk,
+    input  wire        aresetn,
 
-    // data sram interface
-    output wire        data_sram_req,
-    output wire        data_sram_wr,
-    output wire [ 1:0] data_sram_size,
-    output wire [ 3:0] data_sram_wstrb,
-    output wire [31:0] data_sram_addr,
-    output wire [31:0] data_sram_wdata,
-    input  wire        data_sram_addr_ok,
-    input  wire        data_sram_data_ok,
-    input  wire [31:0] data_sram_rdata,
-    // output wire        data_sram_en,     
-    // output wire [ 3:0] data_sram_we,
-    
-    // trace debug interface
+    output wire [ 3:0] arid,
+    output wire [31:0] araddr,
+    output wire [ 7:0] arlen,
+    output wire [ 2:0] arsize,
+    output wire [ 1:0] arburst,
+    output wire [ 1:0] arlock,
+    output wire [ 3:0] arcache,
+    output wire [ 2:0] arprot,
+    output wire        arvalid,
+    input  wire        arready,
+
+    input  wire [ 3:0] rid,
+    input  wire [31:0] rdata,
+    input  wire [ 1:0] rresp,
+    input  wire        rlast,
+    input  wire        rvalid,
+    output wire        rready,
+
+    output wire [ 3:0] awid,
+    output wire [31:0] awaddr,
+    output wire [ 7:0] awlen,
+    output wire [ 2:0] awsize,
+    output wire [ 1:0] awburst,
+    output wire [ 1:0] awlock,
+    output wire [ 3:0] awcache,
+    output wire [ 2:0] awprot,
+    output wire        awvalid,
+    input  wire        awready,
+
+    output wire [ 3:0] wid,
+    output wire [31:0] wdata,
+    output wire [ 3:0] wstrb,
+    output wire        wlast,
+    output wire        wvalid,
+    input  wire        wready,
+
+    input  wire [ 3:0] bid,
+    input  wire [ 1:0] bresp,
+    input  wire        bvalid,
+    output wire        bready,
+
+    //debug interface
     output wire [31:0] debug_wb_pc,
     output wire [ 3:0] debug_wb_rf_we,
     output wire [ 4:0] debug_wb_rf_wnum,
     output wire [31:0] debug_wb_rf_wdata
+
+
+//    input  wire        clk,
+//    input  wire        resetn,
+//    
+//    // inst sram interface
+//    output wire        inst_sram_req,
+//    output wire        inst_sram_wr,
+//    output wire [ 1:0] inst_sram_size,
+//    output wire [ 3:0] inst_sram_wstrb,
+//    output wire [31:0] inst_sram_addr,
+//    output wire [31:0] inst_sram_wdata,
+//    input  wire        inst_sram_addr_ok,
+//    input  wire        inst_sram_data_ok,
+//    input  wire [31:0] inst_sram_rdata,
+//    // output wire        inst_sram_en,//片选信号
+//    // output wire [ 3:0] inst_sram_we,//字节写使能
+//
+//    // data sram interface
+//    output wire        data_sram_req,
+//    output wire        data_sram_wr,
+//    output wire [ 1:0] data_sram_size,
+//    output wire [ 3:0] data_sram_wstrb,
+//    output wire [31:0] data_sram_addr,
+//    output wire [31:0] data_sram_wdata,
+//    input  wire        data_sram_addr_ok,
+//    input  wire        data_sram_data_ok,
+//    input  wire [31:0] data_sram_rdata,
+//    // output wire        data_sram_en,     
+//    // output wire [ 3:0] data_sram_we,
+//    
+//    // trace debug interface
+//    output wire [31:0] debug_wb_pc,
+//    output wire [ 3:0] debug_wb_rf_we,
+//    output wire [ 4:0] debug_wb_rf_wnum,
+//    output wire [31:0] debug_wb_rf_wdata
 );
+
+wire        clk;
+wire        resetn;
+
+wire        inst_sram_req;
+wire        inst_sram_wr;
+wire [ 1:0] inst_sram_size;
+wire [ 3:0] inst_sram_wstrb;
+wire [31:0] inst_sram_addr;
+wire [31:0] inst_sram_wdata;
+wire        inst_sram_addr_ok;
+wire        inst_sram_data_ok;
+wire [31:0] inst_sram_rdata;
+wire        inst_sram_en;//片选信号
+wire [ 3:0] inst_sram_we;//字节写使能
+
+wire        data_sram_req;
+wire        data_sram_wr;
+wire [ 1:0] data_sram_size;
+wire [ 3:0] data_sram_wstrb;
+wire [31:0] data_sram_addr;
+wire [31:0] data_sram_wdata;
+wire        data_sram_addr_ok;
+wire        data_sram_data_ok;
+wire [31:0] data_sram_rdata;
+
+assign clk = aclk;
+assign resetn = aresetn;
+
+wire data_sram_rd_req;
+wire data_sram_wr_req;
+assign data_sram_rd_req = data_sram_req && !data_sram_wr;
+assign data_sram_wr_req = data_sram_req && data_sram_wr;
+
+
+// AR
+reg  [1:0] ar_next_state;
+reg  [1:0] ar_current_state;
+always @(posedge clk) begin
+    if (~resetn) begin
+        ar_current_state <= `AR_INIT;
+    end else begin
+        ar_current_state <= ar_next_state;
+    end
+end
+always @(*) begin
+    case (ar_current_state)
+        `AR_INIT: begin
+            if (!inst_sram_req && !data_sram_rd_req) begin
+                ar_next_state <= `AR_INIT;
+            end else begin
+                if(arready) begin
+                    ar_next_state <= `AR_INIT;
+                end else begin
+                    ar_next_state <= `AR_WAIT;
+                end
+            end
+        end
+        `AR_WAIT: begin
+            if (!arready) begin
+                ar_next_state <= `AR_WAIT;
+            end else begin
+                if(inst_sram_req || data_sram_rd_req) begin
+                    ar_next_state <= `AR_WAIT;
+                end else begin
+                    ar_next_state <= `AR_INIT;
+                end
+            end
+        end
+        default: ar_next_state <= `AR_INIT;
+    endcase
+end
+
+wire ar_waiting_ready;
+assign ar_waiting_ready = ar_current_state == `AR_WAIT && !arready;
+
+reg  [ 3:0] arid_r;
+reg  [31:0] araddr_r;
+reg  [ 2:0] arsize_r;
+always @(posedge clk) begin
+    if (~resetn) begin
+        arid_r <= 4'b0;
+        araddr_r <= 32'b0;
+        arsize_r <= 3'b0;
+    end else begin
+        if (!ar_waiting_ready) begin
+            arid_r <= data_sram_rd_req;
+            araddr_r <= data_sram_rd_req ? data_sram_addr : inst_sram_addr;
+            arsize_r <= data_sram_rd_req ? data_sram_size : inst_sram_size;
+        end
+    end
+end
+
+assign arid     = ar_current_state == `AR_INIT ? data_sram_rd_req                                   : arid_r;
+assign araddr   = ar_current_state == `AR_INIT ? data_sram_rd_req ? data_sram_addr : inst_sram_addr : araddr_r;
+assign arlen    = 8'b0;
+assign arsize   = ar_current_state == `AR_INIT ? data_sram_rd_req ? data_sram_size : inst_sram_size : arsize_r;
+assign arburst  = 2'b01;
+assign arlock   = 2'b00;
+assign arcache  = 4'b0000;
+assign arprot   = 3'b000;
+assign arvalid  = ar_current_state == `AR_WAIT || ar_current_state == `AR_INIT && (inst_sram_req || data_sram_rd_req);
+
+
+// R/B
+assign rready = 1'b1;
+assign bready = 1'b1;
+
+
+// AW/W
+reg  [1:0] aw_w_next_state;
+reg  [1:0] aw_w_current_state;
+always @(posedge clk) begin
+    if (~resetn) begin
+        aw_w_current_state <= `AW_W_INIT;
+    end else begin
+        aw_w_current_state <= aw_w_next_state;
+    end
+end
+always @(*) begin
+    case (aw_w_current_state)
+        `AW_W_INIT: begin
+            if (!data_sram_wr_req || data_sram_wr_req && wready && awready) begin
+                aw_w_next_state <= `AW_W_INIT;
+            end else if (data_sram_wr_req && !wready && !awready) begin
+                aw_w_next_state <= `AW_W_WAIT;
+            end else if (data_sram_wr_req && wready && !awready) begin
+                aw_w_next_state <= `AW_W_WAIT_AW;
+            end else if (data_sram_wr_req && !wready && awready) begin
+                aw_w_next_state <= `AW_W_WAIT_W;
+            end
+        end
+        `AW_W_WAIT: begin
+            if (!wready && !awready || data_sram_wr_req && wready && awready) begin
+                aw_w_next_state <= `AW_W_WAIT;
+            end else if (wready && !awready) begin
+                aw_w_next_state <= `AW_W_WAIT_AW;
+            end else if (!wready && awready) begin
+                aw_w_next_state <= `AW_W_WAIT_W;
+            end else if (!data_sram_wr_req && wready && awready) begin
+                aw_w_next_state <= `AW_W_INIT;
+            end
+        end
+        `AW_W_WAIT_AW: begin
+            if (!awready) begin
+                aw_w_next_state <= `AW_W_WAIT_AW;
+            end else if (data_sram_wr_req && awready) begin
+                aw_w_next_state <= `AW_W_WAIT;
+            end else if (!data_sram_wr_req && awready) begin
+                aw_w_next_state <= `AW_W_INIT;
+            end
+        end
+        `AW_W_WAIT_W: begin
+            if (!wready) begin
+                aw_w_next_state <= `AW_W_WAIT_W;
+            end else if (data_sram_wr_req && wready) begin
+                aw_w_next_state <= `AW_W_WAIT;
+            end else if (!data_sram_wr_req && wready) begin
+                aw_w_next_state <= `AW_W_INIT;
+            end
+        end
+        default: aw_w_next_state <= `AW_W_INIT;
+    endcase
+end
+
+wire aw_w_waiting_ready;
+assign aw_w_waiting_ready = aw_w_current_state == `AW_W_WAIT    && !(awready && wready) 
+                         || aw_w_current_state == `AW_W_WAIT_AW && !awready
+                         || aw_w_current_state == `AW_W_WAIT_W  && !wready;
+
+reg  [31:0] awaddr_r;
+reg  [ 2:0] awsize_r;
+reg  [31:0] wdata_r;    
+reg  [ 3:0] wstrb_r;
+always @(posedge clk) begin
+    if (~resetn) begin
+        awaddr_r <= 32'b0;
+        awsize_r <= 3'b0;
+        wdata_r  <= 32'b0;
+        wstrb_r  <= 4'b0;
+    end else begin
+        if (!aw_w_waiting_ready) begin
+            awaddr_r <= data_sram_addr;
+            awsize_r <= data_sram_size;
+            wdata_r  <= data_sram_wdata;
+            wstrb_r  <= data_sram_wstrb;
+        end
+    end
+end
+
+assign awid     = 4'b1;
+assign awaddr   = aw_w_current_state == `AW_W_INIT ? data_sram_addr : awaddr_r;
+assign awlen    = 8'b0;
+assign awsize   = aw_w_current_state == `AW_W_INIT ? data_sram_size : awsize_r;
+assign awburst  = 2'b01;
+assign awlock   = 2'b00;
+assign awcache  = 4'b0000;
+assign awprot   = 3'b000;
+assign awvalid  = aw_w_current_state == `AW_W_WAIT || aw_w_current_state == `AW_W_WAIT_AW
+               || aw_w_current_state == `AW_W_INIT && data_sram_wr_req;
+
+assign wid      = 4'b1;
+assign wdata    = aw_w_current_state == `AW_W_INIT ? data_sram_wdata : wdata_r;
+assign wstrb    = aw_w_current_state == `AW_W_INIT ? data_sram_wstrb : wstrb_r;
+assign wlast    = 1'b1;
+assign wvalid   = aw_w_current_state == `AW_W_WAIT || aw_w_current_state == `AW_W_WAIT_W
+               || aw_w_current_state == `AW_W_INIT && data_sram_wr_req;
+
+
+// to CPU
+assign inst_sram_addr_ok = !data_sram_rd_req && !ar_waiting_ready;
+assign data_sram_addr_ok = data_sram_rd_req && !ar_waiting_ready || data_sram_wr_req && !aw_w_waiting_ready;
+assign inst_sram_data_ok = rvalid && !rid;
+assign data_sram_data_ok = rvalid && rid || bvalid;
+assign inst_sram_rdata = rdata;
+assign data_sram_rdata = rdata;
+
 /*
 pipe0 preIF
 pipe1 IF

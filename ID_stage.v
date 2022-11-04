@@ -412,7 +412,7 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_bl
                    || inst_b
                   ) && ID_valid;
-assign br_taken_cancel = br_taken & ID_ready_go;
+assign br_taken_cancel = br_taken & ID_ready_go & EXE_allowin;
 
 assign br_target = (inst_beq || inst_bne || inst_bl || inst_b || inst_blt || inst_bge || inst_bltu || inst_bgeu) ? (id_pc + br_offs) :
                                                                                                 /*inst_jirl*/ (rj_value + jirl_offs);

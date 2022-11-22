@@ -48,3 +48,28 @@ generate for (i=0; i<63; i=i+1) begin : gen_for_dec_6_64
 end endgenerate
 
 endmodule
+
+
+module encoder_16_4(
+    input  wire [15:0] in,
+    output wire [ 3:0] out
+);
+
+assign out = {4{in[0]}} & 0
+           | {4{in[1]}} & 1
+           | {4{in[2]}} & 2
+           | {4{in[3]}} & 3
+           | {4{in[4]}} & 4
+           | {4{in[5]}} & 5
+           | {4{in[6]}} & 6
+           | {4{in[7]}} & 7
+           | {4{in[8]}} & 8
+           | {4{in[9]}} & 9
+           | {4{in[10]}} & 10
+           | {4{in[11]}} & 11
+           | {4{in[12]}} & 12
+           | {4{in[13]}} & 13
+           | {4{in[14]}} & 14
+           | {4{in[15]}} & 15;
+
+endmodule

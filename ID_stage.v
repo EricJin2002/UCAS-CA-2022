@@ -20,7 +20,9 @@ module ID_stage(
     
     input  wire        ertn_flush,
     input  wire        wb_ex,
-    input  wire        has_int
+    input  wire        has_int,
+    input  wire        wb_refetch,
+    output wire        ID_to_IF_refetch
 );
 
 
@@ -39,7 +41,7 @@ assign ID_allowin = !ID_valid || ID_ready_go && EXE_allowin;
 always @(posedge clk)begin
     if (~resetn) begin
         ID_valid <= 1'b0;
-    end else if (ertn_flush || wb_ex) begin
+    end else if (ertn_flush || wb_ex || wb_refetch) begin
         ID_valid <= 1'b0;
     end else if (br_taken_cancel) begin
         ID_valid <= 1'b0;
@@ -78,7 +80,9 @@ wire [14: 0] id_ex_code_in;
 wire [14: 0] id_ex_code_out;
 wire [31: 0] id_ex_vaddr_in;
 wire [31: 0] id_ex_vaddr_out;
-assign {id_pc,inst,id_ex_in,id_ex_code_in,id_ex_vaddr_in} = IF_to_ID_BUS_temp;
+wire         id_refetch_in;
+wire         id_refetch_out;
+assign {id_pc,inst,id_ex_in,id_ex_code_in,id_ex_vaddr_in,id_refetch_in} = IF_to_ID_BUS_temp;
 
 
 // WB to RF
@@ -109,6 +113,11 @@ wire [31:0] rkd_value;
 wire [31:0] imm;
 wire [31:0] br_offs;
 wire [31:0] jirl_offs;
+
+wire [ 4:0] tlb_inst_op;
+wire [ 9:0] invtlb_asid;
+wire [18:0] invtlb_vppn;
+wire [ 4:0] invtlb_op;
 
 wire [ 5:0] op_31_26;
 wire [ 3:0] op_25_22;
@@ -187,6 +196,11 @@ wire        inst_break;
 wire        inst_rdcntid_w;
 wire        inst_rdcntvl_w;
 wire        inst_rdcntvh_w;
+wire        inst_tlbsrch;
+wire        inst_tlbrd;
+wire        inst_tlbwr;
+wire        inst_tlbfill;
+wire        inst_invtlb;
 
 wire        need_ui5;
 wire        need_ui12;
@@ -275,6 +289,11 @@ assign inst_syscall     = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2
 assign inst_rdcntid_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk==5'b11000) & (rd==5'b00000);
 assign inst_rdcntvl_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk==5'b11000) & op_9_5_d[5'h00];
 assign inst_rdcntvh_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk==5'b11001) & op_9_5_d[5'h00];
+assign inst_tlbsrch     = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h10] & (rk==5'b01010) & (rj==5'b00000) & (rd==5'b00000);
+assign inst_tlbrd       = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h10] & (rk==5'b01011) & (rj==5'b00000) & (rd==5'b00000);
+assign inst_tlbwr       = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h10] & (rk==5'b01100) & (rj==5'b00000) & (rd==5'b00000);
+assign inst_tlbfill     = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h10] & (rk==5'b01101) & (rj==5'b00000) & (rd==5'b00000);
+assign inst_invtlb      = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h13];
 
 assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu
                     | inst_st_w | inst_st_b | inst_st_h
@@ -312,8 +331,10 @@ assign imm = {32{src2_is_4}} & 32'h4                     |
 
 assign src_reg_is_rd  = inst_beq | inst_bne | inst_st_w | inst_st_b | inst_st_h | inst_blt | inst_bge | inst_bltu | inst_bgeu
                       | inst_csrrd | inst_csrwr | inst_csrxchg;
-assign src_reg_is_rk  = inst_add_w | inst_sub_w | inst_slt | inst_sltu | inst_and | inst_or | inst_nor | inst_xor | inst_sll | inst_srl | inst_sra | inst_mul_w | inst_mulh_w | inst_mulh_wu | inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;   
-assign src_reg_is_rj  = ~inst_b & ~inst_bl & ~inst_lu12i_w & ~inst_csrrd & ~inst_csrwr & ~inst_ertn & ~inst_break & ~inst_syscall & ~inst_rdcntid_w & ~inst_rdcntvl_w & ~inst_rdcntvh_w;
+assign src_reg_is_rk  = inst_add_w | inst_sub_w | inst_slt | inst_sltu | inst_and | inst_or | inst_nor | inst_xor | inst_sll | inst_srl | inst_sra 
+                      | inst_mul_w | inst_mulh_w | inst_mulh_wu | inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu | inst_invtlb;
+assign src_reg_is_rj  = ~inst_b & ~inst_bl & ~inst_lu12i_w & ~inst_csrrd & ~inst_csrwr & ~inst_ertn & ~inst_break & ~inst_syscall 
+                      & ~inst_rdcntid_w & ~inst_rdcntvl_w & ~inst_rdcntvh_w & ~inst_tlbsrch & ~inst_tlbrd & ~inst_tlbwr & ~inst_tlbfill;
 assign src_reg_is_rkd = src_reg_is_rd | src_reg_is_rk;
 assign rkd = {5{src_reg_is_rk}} & rk |
              {5{src_reg_is_rd}} & rd ;
@@ -350,7 +371,8 @@ assign store_load_op = {inst_st_w, inst_st_b, inst_st_h, inst_ld_w, inst_ld_b, i
 assign rfrom_mem     = inst_ld_w | inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu;
 assign dst_is_r1     = inst_bl;
 assign dst_is_rj     = inst_rdcntid_w;
-assign gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu & ~inst_ertn & ~inst_break & ~inst_syscall;
+assign gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq & ~inst_bne & ~inst_b & ~inst_blt & ~inst_bge & ~inst_bltu & ~inst_bgeu 
+                     & ~inst_ertn & ~inst_break & ~inst_syscall & ~inst_tlbsrch & ~inst_tlbrd & ~inst_tlbwr & ~inst_tlbfill & ~inst_invtlb;
 assign mem_en        = inst_st_w | inst_st_b | inst_st_h;
 assign dest          = {5{dst_is_r1}}                & 5'b1
                      | {5{dst_is_rj}}                & rj
@@ -478,6 +500,11 @@ assign ex_ine = !(
     || inst_rdcntid_w
     || inst_rdcntvl_w
     || inst_rdcntvh_w
+    || inst_tlbsrch
+    || inst_tlbrd
+    || inst_tlbwr
+    || inst_tlbfill
+    || inst_invtlb && invtlb_op>=0 && invtlb_op<=6
 );
 
 // we assum that has_int has the highest priority among all exceptions
@@ -488,6 +515,20 @@ assign id_ex_code_out   = has_int            ? {9'b0, `ECODE_INT}
                         | {15{inst_break  }} & {9'b0, `ECODE_BRK}
                         | {15{ex_ine      }} & {9'b0, `ECODE_INE};
 assign id_ex_vaddr_out  = id_ex_vaddr_in;
+
+assign id_refetch_out   = id_refetch_in;
+
+assign ID_to_IF_refetch = ID_valid && !(id_ex_out || id_refetch_out) && resetn && (
+    inst_tlbwr || inst_tlbfill || inst_tlbrd || inst_invtlb || 
+    (inst_csrwr || inst_csrxchg) && (csr_num==`CSR_CRMD || csr_num==`CSR_DMW0 || csr_num==`CSR_DMW1 || csr_num==`CSR_ASID)
+);
+
+
+// tlb
+assign tlb_inst_op = {inst_invtlb,inst_tlbfill,inst_tlbwr,inst_tlbrd,inst_tlbsrch};
+assign invtlb_asid = rj_value[9:0];
+assign invtlb_vppn = rkd_value[31:13];
+assign invtlb_op   = rd;
 
 
 // stable counter
@@ -500,7 +541,8 @@ assign rfrom_cntid = inst_rdcntid_w;
 
 
 // ID to EXE
-assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,id_ex_out,id_ex_code_out,id_ex_vaddr_out,inst_ertn,rfrom_cntvl,rfrom_cntvh,rfrom_cntid};
+assign ID_to_EXE_BUS = {id_pc,gr_we,dest,rkd_value,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,
+    id_ex_out,id_ex_code_out,id_ex_vaddr_out,inst_ertn,rfrom_cntvl,rfrom_cntvh,rfrom_cntid,id_refetch_out,tlb_inst_op,invtlb_asid,invtlb_vppn,invtlb_op};
 
 
 // ready go & bypass
@@ -541,7 +583,7 @@ assign check_rkd = (src_reg_is_rkd && (rkd != 5'b00000)) ? ~(
     rkd==MEM_dest && (MEM_rfrom_cntid || !MEM_to_WB_valid)
 ) : 1;
 assign check_csr = rfrom_csr ? ~(EXE_csr_we && EXE_valid && EXE_csr_num==csr_num || MEM_csr_we && MEM_valid && MEM_csr_num==csr_num) : 1;
-assign ID_ready_go = check_rj && check_rkd && check_csr || wb_ex || ertn_flush;
+assign ID_ready_go = check_rj && check_rkd && check_csr || wb_ex || ertn_flush || wb_refetch;
 
 assign rj_value  = (rj  == 5'b00000) ? 32'b0 : (rj  == EXE_dest) ? EXE_result : (rj  == MEM_dest) ? MEM_result : (rj  == WB_dest) ? WB_result : rf_rdata1;
 assign rkd_value = (rkd == 5'b00000) ? 32'b0 : (rkd == EXE_dest) ? EXE_result : (rkd == MEM_dest) ? MEM_result : (rkd == WB_dest) ? WB_result : rf_rdata2;

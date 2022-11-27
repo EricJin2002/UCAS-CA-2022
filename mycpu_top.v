@@ -378,6 +378,13 @@ wire [31: 0] csr_wmask;
 wire [13: 0] csr_rnum;
 wire [31: 0] csr_rvalue;
 
+// for tlb
+wire [ 4: 0] tlb_inst_op_from_EXE;
+wire [ 4: 0] tlb_inst_op_from_WB;
+wire [ 9: 0] invtlb_asid;
+wire [18: 0] invtlb_vppn;
+wire [ 4: 0] invtlb_op;
+
 wire [31: 0] wb_pc;
 wire [31: 0] wb_vaddr;
 wire [ 7: 0] hw_int_in;
@@ -389,11 +396,16 @@ wire         ertn_flush;
 wire         wb_ex;
 wire [ 5: 0] wb_ecode;
 wire [ 8: 0] wb_esubcode;
+wire         wb_refetch;
+wire         ID_to_IF_refetch;
+wire         MEM_to_EXE_block_tlbsrch;
+wire         WB_to_EXE_block_tlbsrch;
 
 wire [31: 0] if_pc;
 
 wire         mem_ertn;
 wire         mem_ex;
+wire         mem_refetch;
 
 wire [63: 0] stable_cnt;
 wire [31: 0] stable_cnt_tid;
@@ -447,8 +459,10 @@ preIF_stage mypreIF(
     .if_pc(if_pc),
     .ertn_flush(ertn_flush),
     .wb_ex(wb_ex),
+    .wb_refetch(wb_refetch),
     .ex_ra(ex_ra),
-    .ex_entry(ex_entry)
+    .ex_entry(ex_entry),
+    .wb_pc(wb_pc)
 );
 
 IF_stage myIF(
@@ -466,7 +480,9 @@ IF_stage myIF(
     .IF_allowin(IF_allowin),
     .if_pc(if_pc),
     .ertn_flush(ertn_flush),
-    .wb_ex(wb_ex)
+    .wb_ex(wb_ex),
+    .wb_refetch(wb_refetch),
+    .ID_to_IF_refetch(ID_to_IF_refetch)
 );
 
 ID_stage myID(
@@ -486,7 +502,9 @@ ID_stage myID(
     .ID_allowin(ID_allowin),
     .ertn_flush(ertn_flush),
     .wb_ex(wb_ex),
-    .has_int(has_int)
+    .has_int(has_int),
+    .wb_refetch(wb_refetch),
+    .ID_to_IF_refetch(ID_to_IF_refetch)
 );
 
 EXE_stage myEXE(
@@ -514,7 +532,15 @@ EXE_stage myEXE(
     .wb_ex(wb_ex),
     .mem_ertn(mem_ertn),
     .mem_ex(mem_ex),
-    .stable_cnt(stable_cnt)
+    .wb_refetch(wb_refetch),
+    .mem_refetch(mem_refetch),
+    .stable_cnt(stable_cnt),
+    .tlb_inst_op_to_csr(tlb_inst_op_from_EXE),
+    .invtlb_asid(invtlb_asid),
+    .invtlb_vppn(invtlb_vppn),
+    .invtlb_op(invtlb_op),
+    .MEM_to_EXE_block_tlbsrch(MEM_to_EXE_block_tlbsrch),
+    .WB_to_EXE_block_tlbsrch(WB_to_EXE_block_tlbsrch)
 );
 
 MEM_stage myMEM(
@@ -532,8 +558,11 @@ MEM_stage myMEM(
     .IO_cnt(data_IO_cnt),
     .ertn_flush(ertn_flush),
     .wb_ex(wb_ex),
+    .wb_refetch(wb_refetch),
     .mem_ertn(mem_ertn),
-    .mem_ex(mem_ex)
+    .mem_ex(mem_ex),
+    .mem_refetch(mem_refetch),
+    .MEM_to_EXE_block_tlbsrch(MEM_to_EXE_block_tlbsrch)
 );
 
 WB_stage myWB(
@@ -549,6 +578,7 @@ WB_stage myWB(
     .wb_ex(wb_ex),
     .wb_ecode(wb_ecode),
     .wb_esubcode(wb_esubcode),
+    .wb_refetch(wb_refetch),
     .debug_wb_pc(debug_wb_pc),
     .debug_wb_rf_we(debug_wb_rf_we),
     .debug_wb_rf_wnum(debug_wb_rf_wnum),
@@ -558,7 +588,9 @@ WB_stage myWB(
     .WB_RF_BUS(WB_RF_BUS),
     .MEM_to_WB_valid(MEM_to_WB_valid),
     .WB_allowin(WB_allowin),
-    .stable_cnt_tid(stable_cnt_tid)
+    .stable_cnt_tid(stable_cnt_tid),
+    .tlb_inst_op_to_csr(tlb_inst_op_from_WB),
+    .WB_to_EXE_block_tlbsrch(WB_to_EXE_block_tlbsrch)
 );
 
 control_status_register myCSR(
@@ -582,7 +614,11 @@ control_status_register myCSR(
     .wb_ecode(wb_ecode),
     .wb_esubcode(wb_esubcode),
     .stable_cnt(stable_cnt),
-    .stable_cnt_tid(stable_cnt_tid)
+    .stable_cnt_tid(stable_cnt_tid),
+    .tlb_inst_op(tlb_inst_op_from_EXE | tlb_inst_op_from_WB),
+    .invtlb_asid(invtlb_asid),
+    .invtlb_vppn(invtlb_vppn),
+    .invtlb_op(invtlb_op)
 );
 
 assign hw_int_in = 8'b0;

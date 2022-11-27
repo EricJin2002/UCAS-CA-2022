@@ -15,7 +15,7 @@ module tlb #(
     output wire [               1:0] s0_mat,
     output wire                      s0_d,
     output wire                      s0_v,
-    // search port 1 (for load/store)
+    // search port 1 (for load/store) (also for TLBSRCH & INVTLB)
     input  wire [              18:0] s1_vppn,
     input  wire                      s1_va_bit12,
     input  wire [               9:0] s1_asid,
@@ -83,12 +83,37 @@ reg [       1:0] tlb_mat1   [TLBNUM-1:0];
 reg              tlb_d1     [TLBNUM-1:0];
 reg              tlb_v1     [TLBNUM-1:0];
 
+genvar i;
+
+// invtlb
+wire [TLBNUM-1:0] cond1;
+wire [TLBNUM-1:0] cond2;
+wire [TLBNUM-1:0] cond3;
+wire [TLBNUM-1:0] cond4;
+
+wire [TLBNUM-1:0] invtlb_match;
+
+generate
+    for (i=0; i<TLBNUM; i=i+1) begin : invtlb
+        assign cond1[i] = !tlb_g[i];
+        assign cond2[i] = tlb_g[i];
+        assign cond3[i] = s1_asid==tlb_asid[i];
+        assign cond4[i] = (s1_vppn[18:10]==tlb_vppn[i][18:10]) 
+                        && (tlb_ps4MB[i] || s1_vppn[9:0]==tlb_vppn[i][9:0]);
+        assign invtlb_match[i] = invtlb_op==5'h0 && (cond1[i] || cond2[i])
+                              || invtlb_op==5'h1 && (cond1[i] || cond2[i])
+                              || invtlb_op==5'h2 && cond2[i]
+                              || invtlb_op==5'h3 && cond1[i]
+                              || invtlb_op==5'h4 && cond1[i] && cond3[i]
+                              || invtlb_op==5'h5 && cond1[i] && cond3[i] && cond4[i]
+                              || invtlb_op==5'h6 && (cond2[i] || cond3[i]) && cond4[i];
+    end
+endgenerate
 
 // search
 wire [TLBNUM-1:0] match0;
 wire [TLBNUM-1:0] match1;
 
-genvar i;
 generate
     for (i = 0; i < TLBNUM; i = i + 1) begin : TLB
         assign match0[i] = (s0_vppn[18:10]==tlb_vppn[i][18:10]) 
@@ -138,6 +163,7 @@ assign s1_v     = s1_va_bit_ps ? tlb_v1[s1_index]   : tlb_v0[s1_index];
 
 
 // write
+integer j;
 always @(posedge clk) begin
     if (we) begin
         tlb_e       [w_index] <= w_e;
@@ -155,6 +181,12 @@ always @(posedge clk) begin
         tlb_mat1    [w_index] <= w_mat1;
         tlb_d1      [w_index] <= w_d1;
         tlb_v1      [w_index] <= w_v1;
+    end else if (invtlb_valid) begin
+        for (j = 0; j < TLBNUM; j = j + 1) begin
+            if (invtlb_match[j]) begin
+                tlb_e[j] <= 1'b0;
+            end
+        end
     end
 end
 

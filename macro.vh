@@ -1,10 +1,10 @@
 `define BR_BUS_LEN 34
-`define preIF_to_IF_LEN 112
-`define IF_to_ID_LEN 112
-`define ID_to_EXE_LEN 295
+`define preIF_to_IF_LEN 113
+`define IF_to_ID_LEN 113
+`define ID_to_EXE_LEN 335
 `define RF_BUS_LEN 38
-`define EXE_to_MEM_LEN 310
-`define MEM_to_WB_LEN 199
+`define EXE_to_MEM_LEN 316
+`define MEM_to_WB_LEN 205
 `define EXE_RF_LEN 56
 `define MEM_RF_LEN 55
 `define WB_RF_LEN  37
@@ -116,6 +116,43 @@
 `define CSR_TICLR_CLR   0
 //`define CSR_TICLR_0     31:1
 
+// for tlb
+`define CSR_TLBIDX_INDEX    3:0
+// `define CSR_TLBIDX_0        23:4
+`define CSR_TLBIDX_PS       29:24
+// `define CSR_TLBIDX_0        30
+`define CSR_TLBIDX_NE       31
+
+// `define CSR_TLBEHI_0        12:0
+`define CSR_TLBEHI_VPPN     31:13
+
+`define CSR_TLBELO0_V       0
+`define CSR_TLBELO0_D       1
+`define CSR_TLBELO0_PLV     3:2
+`define CSR_TLBELO0_MAT     5:4
+`define CSR_TLBELO0_G       6
+// `define CSR_TLBELO0_0       7
+`define CSR_TLBELO0_PPN     27:8
+// `define CSR_TLBELO0_0       31:28
+
+`define CSR_TLBELO1_V       0
+`define CSR_TLBELO1_D       1
+`define CSR_TLBELO1_PLV     3:2
+`define CSR_TLBELO1_MAT     5:4
+`define CSR_TLBELO1_G       6
+// `define CSR_TLBELO1_0       7
+`define CSR_TLBELO1_PPN     27:8
+// `define CSR_TLBELO1_0       31:28
+
+`define CSR_ASID_ASID       9:0
+// `define CSR_ASID_0          15:10
+`define CSR_ASID_ASIDBITS   23:16
+// `define CSR_ASID_0          31:24
+
+// `define CSR_TLBRENTRY_0     5:0
+`define CSR_TLBRENTRY_PA    31:6
+
+
 `define preIF_INIT 2'b01
 `define preIF_BLOCKED 2'b10
 
@@ -136,3 +173,15 @@
 `define AW_W_WAIT 2'b01
 `define AW_W_WAIT_W 2'b10
 `define AW_W_WAIT_AW 2'b11
+
+`define TLB_INST_TLBSRCH    0
+`define TLB_INST_TLBRD      1
+`define TLB_INST_TLBWR      2
+`define TLB_INST_TLBFILL    3
+`define TLB_INST_INVTLB     4
+
+`define TLB_INST_TLBSRCH_MASK   5'b00001
+`define TLB_INST_TLBRD_MASK     5'b00010
+`define TLB_INST_TLBWR_MASK     5'b00100
+`define TLB_INST_TLBFILL_MASK   5'b01000
+`define TLB_INST_INVTLB_MASK    5'b10000

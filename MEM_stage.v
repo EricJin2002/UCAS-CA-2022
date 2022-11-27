@@ -20,8 +20,11 @@ module MEM_stage(
 
     input  wire        ertn_flush,
     input  wire        wb_ex,
+    input  wire        wb_refetch,
     output wire        mem_ertn,
-    output wire        mem_ex
+    output wire        mem_ex,
+    output wire        mem_refetch,
+    output wire        MEM_to_EXE_block_tlbsrch
 );
 reg [3:0] current_state;
 reg [3:0] next_state;
@@ -63,12 +66,16 @@ wire [14: 0] mem_ex_code_in;
 wire [14: 0] mem_ex_code_out;
 wire [31: 0] mem_ex_vaddr_in;
 wire [31: 0] mem_ex_vaddr_out;
+wire         mem_refetch_in;
+wire         mem_refetch_out;
 wire         inst_ertn;
 wire         rfrom_cntid;
 wire [63: 0] mul_result;
 wire [ 6: 0] mul_div_op;
 wire         wait_store_ok;
-assign {mem_pc,gr_we,dest,exe_result,data_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,mem_ex_in,mem_ex_code_in,mem_ex_vaddr_in,inst_ertn,rfrom_cntid,mul_result,mul_div_op,wait_store_ok} = EXE_to_MEM_BUS_temp;
+wire [ 4: 0] tlb_inst_op;
+assign {mem_pc,gr_we,dest,exe_result,data_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,
+    mem_ex_in,mem_ex_code_in,mem_ex_vaddr_in,inst_ertn,rfrom_cntid,mul_result,mul_div_op,wait_store_ok,mem_refetch_in,tlb_inst_op} = EXE_to_MEM_BUS_temp;
 
 
 assign MEM_ready_go = (data_ok_r || data_sram_data_ok) && (current_state != `MEM_CANCEL) || !(rfrom_mem || wait_store_ok) || mem_ex_out;
@@ -76,7 +83,7 @@ assign MEM_ready_go = (data_ok_r || data_sram_data_ok) && (current_state != `MEM
 always @(posedge clk) begin
     if (~resetn) begin
         MEM_valid <= 1'b0;
-    end else if (ertn_flush || wb_ex) begin
+    end else if (ertn_flush || wb_ex || wb_refetch) begin
         MEM_valid <= 1'b0;
     end else if (MEM_allowin) begin
         MEM_valid <= EXE_to_MEM_valid;
@@ -97,7 +104,7 @@ always @(*) begin
     end else begin
         case (current_state)
             `MEM_INIT : begin
-                if((wb_ex || ertn_flush) && !MEM_allowin && !MEM_ready_go && (rfrom_mem || wait_store_ok))
+                if((wb_ex || wb_refetch || ertn_flush) && !MEM_allowin && !MEM_ready_go && (rfrom_mem || wait_store_ok))
                     next_state <= `MEM_CANCEL;
                 else 
                     next_state <= `MEM_INIT; 
@@ -123,7 +130,7 @@ always @(posedge clk) begin
     if (~resetn) begin
         data_ok_r   <= 1'b0;
         mem_data_r  <= 32'b0;
-    end else if (wb_ex || ertn_flush) begin
+    end else if (wb_ex || wb_refetch || ertn_flush) begin
         data_ok_r   <= 1'b0;
         mem_data_r  <= 32'b0;
     end else if (data_sram_data_ok && !(MEM_to_WB_valid && WB_allowin)) begin
@@ -167,12 +174,19 @@ assign mem_ex_vaddr_out = mem_ex_vaddr_in;
 assign mem_ex = mem_ex_out && MEM_valid;
 assign mem_ertn = inst_ertn && MEM_valid;
 
+assign mem_refetch_out = mem_refetch_in;
+
+assign mem_refetch = mem_refetch_out && MEM_valid;
+
+assign MEM_to_EXE_block_tlbsrch = (csr_we && (csr_num==`CSR_ASID || csr_num==`CSR_TLBEHI) || tlb_inst_op[`TLB_INST_TLBRD]) && MEM_valid;
+
 
 // data sram
 assign mem_data = data_sram_rdata;
 
 
 // MEM to WB
-assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,ms_final_result,csr_num,csr_we,csr_wvalue,csr_wmask,mem_ex_out,mem_ex_code_out,mem_ex_vaddr_out,inst_ertn,rfrom_cntid};
+assign MEM_to_WB_BUS = {mem_pc,gr_we,dest,ms_final_result,csr_num,csr_we,csr_wvalue,csr_wmask,
+    mem_ex_out,mem_ex_code_out,mem_ex_vaddr_out,inst_ertn,rfrom_cntid,mem_refetch_out,tlb_inst_op};
 
 endmodule

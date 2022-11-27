@@ -30,8 +30,17 @@ module EXE_stage(
     input  wire        wb_ex,
     input  wire        mem_ertn,
     input  wire        mem_ex,
+    input  wire        wb_refetch,
+    input  wire        mem_refetch,
 
-    input  wire [63:0] stable_cnt
+    input  wire [63:0] stable_cnt,
+    
+    output wire [ 4:0] tlb_inst_op_to_csr,
+    output wire [ 9:0] invtlb_asid,
+    output wire [18:0] invtlb_vppn,
+    output wire [ 4:0] invtlb_op,
+    input  wire        MEM_to_EXE_block_tlbsrch,
+    input  wire        WB_to_EXE_block_tlbsrch
 );
 
 
@@ -44,7 +53,7 @@ assign EXE_allowin = !EXE_valid || EXE_ready_go && MEM_allowin;
 always @(posedge clk)begin
     if (~resetn) begin
         EXE_valid <= 1'b0;
-    end else if (ertn_flush || wb_ex) begin
+    end else if (ertn_flush || wb_ex || wb_refetch) begin
         EXE_valid <= 1'b0;
     end else if (EXE_allowin) begin
         EXE_valid <= ID_to_EXE_valid;
@@ -85,11 +94,15 @@ wire [14: 0] exe_ex_code_in;
 wire [14: 0] exe_ex_code_out;
 wire [31: 0] exe_ex_vaddr_in;
 wire [31: 0] exe_ex_vaddr_out;
+wire         exe_refetch_in;
+wire         exe_refetch_out;
 wire         inst_ertn;
 wire         rfrom_cntvl;
 wire         rfrom_cntvh;
 wire         rfrom_cntid;
-assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_in,exe_ex_code_in,exe_ex_vaddr_in,inst_ertn,rfrom_cntvl,rfrom_cntvh,rfrom_cntid} = ID_to_EXE_BUS_temp;
+wire [ 4: 0] tlb_inst_op;
+assign {exe_pc,gr_we,dest,mem_sum,mem_en,alu_op,alu_src1,alu_src2,store_load_op,rfrom_mem,mul_div_op,rfrom_csr,csr_num,csr_we,csr_wvalue,csr_wmask,
+    exe_ex_in,exe_ex_code_in,exe_ex_vaddr_in,inst_ertn,rfrom_cntvl,rfrom_cntvh,rfrom_cntid,exe_refetch_in,tlb_inst_op,invtlb_asid,invtlb_vppn,invtlb_op} = ID_to_EXE_BUS_temp;
 //mul_div_op = {inst_mul_w,inst_mulh_w,inst_mulh_wu,inst_div_w,inst_mod_w,inst_div_wu,inst_mod_wu};
 
 
@@ -115,11 +128,11 @@ div_gen_signed u_div_gen_signed(
     .s_axis_divisor_tdata   (alu_src2),
     .s_axis_divisor_tready  (div_divisor_ready_signed),
     .s_axis_divisor_tvalid  (div_valid_signed && EXE_valid && 
-                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush)),
+                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush || wb_refetch || mem_refetch)),
     .s_axis_dividend_tdata  (alu_src1),
     .s_axis_dividend_tready (div_dividend_ready_signed),
     .s_axis_dividend_tvalid (div_valid_signed && EXE_valid && 
-                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush)),
+                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush || wb_refetch || mem_refetch)),
     .m_axis_dout_tdata      (div_result_signed),
     .m_axis_dout_tvalid     (div_dout_valid_signed)
 );
@@ -145,11 +158,11 @@ div_gen_unsigned u_div_gen_unsigned(
     .s_axis_divisor_tdata   (alu_src2),
     .s_axis_divisor_tready  (div_divisor_ready_unsigned),
     .s_axis_divisor_tvalid  (div_valid_unsigned && EXE_valid && 
-                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush)),
+                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush || wb_refetch || mem_refetch)),
     .s_axis_dividend_tdata  (alu_src1),
     .s_axis_dividend_tready (div_dividend_ready_unsigned),
     .s_axis_dividend_tvalid (div_valid_unsigned && EXE_valid && 
-                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush)),
+                                !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush || wb_refetch || mem_refetch)),
     .m_axis_dout_tdata      (div_result_unsigned),
     .m_axis_dout_tvalid     (div_dout_valid_unsigned)
 );
@@ -213,7 +226,8 @@ assign exe_result = /* {32{~rfrom_csr & mul_div_op[6]}}                    & mul
 assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed 
                    || (mul_div_op[1] || mul_div_op[0]) && div_dout_valid_unsigned
                    || (|store_load_op) && data_sram_req && data_sram_addr_ok
-                   || !(mul_div_op[3] || mul_div_op[2] || mul_div_op[1] || mul_div_op[0] || (|store_load_op))
+                   || (tlb_inst_op[`TLB_INST_TLBSRCH] || tlb_inst_op[`TLB_INST_INVTLB]) && !MEM_to_EXE_block_tlbsrch && !WB_to_EXE_block_tlbsrch
+                   || !(mul_div_op[3] || mul_div_op[2] || mul_div_op[1] || mul_div_op[0] || (|store_load_op) || tlb_inst_op[`TLB_INST_TLBSRCH] || tlb_inst_op[`TLB_INST_INVTLB])
                    || exe_ex_out;
 
 
@@ -223,12 +237,9 @@ assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,rfrom_mul,r
 
 
 // data sram
-// assign data_sram_en    = (rfrom_mem || mem_en) && EXE_valid && 
-//                         !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush);
-
 
 assign data_sram_req   = (rfrom_mem || mem_en) && EXE_valid && MEM_allowin && resetn &&
-                        !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush);
+                        !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush || wb_refetch || mem_refetch);
 
 wire [3:0] mask;
 assign mask = {
@@ -262,6 +273,14 @@ assign exe_ex_code_out  = exe_ex_in ? exe_ex_code_in :
 assign exe_ex_vaddr_out = exe_ex_in ? exe_ex_vaddr_in :
                           {32{ex_ale}} & alu_result;
 
+assign exe_refetch_out  = exe_refetch_in;
+
+
+// tlb
+assign tlb_inst_op_to_csr = {
+    5{EXE_valid && MEM_allowin && resetn && !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush || wb_refetch || mem_refetch)}
+} & tlb_inst_op & (`TLB_INST_TLBSRCH_MASK | `TLB_INST_INVTLB_MASK);
+
 
 // EXE to MEM
 wire [4:0] load_op;
@@ -270,6 +289,7 @@ assign load_op = store_load_op[4:0];
 wire wait_store_ok;
 assign wait_store_ok = store_load_op[`ST_B] || store_load_op[`ST_H] || store_load_op[`ST_W];
 
-assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,exe_ex_out,exe_ex_code_out,exe_ex_vaddr_out,inst_ertn,rfrom_cntid,mul_result[63:0],mul_div_op,wait_store_ok};
+assign EXE_to_MEM_BUS = {exe_pc,gr_we,dest,exe_result,mem_sum,mem_en,load_op,rfrom_mem,csr_num,csr_we,csr_wvalue,csr_wmask,
+    exe_ex_out,exe_ex_code_out,exe_ex_vaddr_out,inst_ertn,rfrom_cntid,mul_result[63:0],mul_div_op,wait_store_ok,exe_refetch_out,tlb_inst_op};
 
 endmodule

@@ -407,6 +407,23 @@ wire         mem_ertn;
 wire         mem_ex;
 wire         mem_refetch;
 
+wire [31: 0] next_pc_vaddr;
+wire [31: 0] next_pc_paddr;
+wire         to_PreIF_ex_ade;
+wire         to_PreIF_ex_tlbr;
+wire         to_PreIF_ex_pif;
+wire         to_PreIF_ex_ppi;
+
+wire [31: 0] mem_vaddr;
+wire [31: 0] mem_paddr;
+wire         mem_wr;
+wire         to_EXE_ex_ade;
+wire         to_EXE_ex_tlbr;
+wire         to_EXE_ex_pil;
+wire         to_EXE_ex_pis;
+wire         to_EXE_ex_ppi;
+wire         to_EXE_ex_pme;
+
 wire [63: 0] stable_cnt;
 wire [31: 0] stable_cnt_tid;
 
@@ -462,7 +479,13 @@ preIF_stage mypreIF(
     .wb_refetch(wb_refetch),
     .ex_ra(ex_ra),
     .ex_entry(ex_entry),
-    .wb_pc(wb_pc)
+    .wb_pc(wb_pc),
+    .next_pc_vaddr(next_pc_vaddr),
+    .next_pc_paddr(next_pc_paddr),
+    .to_PreIF_ex_ade(to_PreIF_ex_ade),
+    .to_PreIF_ex_tlbr(to_PreIF_ex_tlbr),
+    .to_PreIF_ex_pif(to_PreIF_ex_pif),
+    .to_PreIF_ex_ppi(to_PreIF_ex_ppi)
 );
 
 IF_stage myIF(
@@ -540,7 +563,16 @@ EXE_stage myEXE(
     .invtlb_vppn(invtlb_vppn),
     .invtlb_op(invtlb_op),
     .MEM_to_EXE_block_tlbsrch(MEM_to_EXE_block_tlbsrch),
-    .WB_to_EXE_block_tlbsrch(WB_to_EXE_block_tlbsrch)
+    .WB_to_EXE_block_tlbsrch(WB_to_EXE_block_tlbsrch),
+    .mem_vaddr(mem_vaddr),
+    .mem_paddr(mem_paddr),
+    .mem_wr(mem_wr),
+    .to_EXE_ex_ade(to_EXE_ex_ade),
+    .to_EXE_ex_tlbr(to_EXE_ex_tlbr),
+    .to_EXE_ex_pil(to_EXE_ex_pil),
+    .to_EXE_ex_pis(to_EXE_ex_pis),
+    .to_EXE_ex_ppi(to_EXE_ex_ppi),
+    .to_EXE_ex_pme(to_EXE_ex_pme)
 );
 
 MEM_stage myMEM(
@@ -618,7 +650,22 @@ control_status_register myCSR(
     .tlb_inst_op(tlb_inst_op_from_EXE | tlb_inst_op_from_WB),
     .invtlb_asid(invtlb_asid),
     .invtlb_vppn(invtlb_vppn),
-    .invtlb_op(invtlb_op)
+    .invtlb_op(invtlb_op),
+    .next_pc_vaddr(next_pc_vaddr),
+    .next_pc_paddr(next_pc_paddr),
+    .to_PreIF_ex_ade(to_PreIF_ex_ade),
+    .to_PreIF_ex_tlbr(to_PreIF_ex_tlbr),
+    .to_PreIF_ex_pif(to_PreIF_ex_pif),
+    .to_PreIF_ex_ppi(to_PreIF_ex_ppi),
+    .mem_vaddr(mem_vaddr),
+    .mem_paddr(mem_paddr),
+    .mem_wr(mem_wr),
+    .to_EXE_ex_ade(to_EXE_ex_ade),
+    .to_EXE_ex_tlbr(to_EXE_ex_tlbr),
+    .to_EXE_ex_pil(to_EXE_ex_pil),
+    .to_EXE_ex_pis(to_EXE_ex_pis),
+    .to_EXE_ex_ppi(to_EXE_ex_ppi),
+    .to_EXE_ex_pme(to_EXE_ex_pme)
 );
 
 assign hw_int_in = 8'b0;

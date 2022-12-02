@@ -1,5 +1,5 @@
 `define BR_BUS_LEN 34
-`define preIF_to_IF_LEN 113
+`define preIF_to_IF_LEN 81
 `define IF_to_ID_LEN 113
 `define ID_to_EXE_LEN 335
 `define RF_BUS_LEN 38
@@ -151,6 +151,24 @@
 
 // `define CSR_TLBRENTRY_0     5:0
 `define CSR_TLBRENTRY_PA    31:6
+
+`define CSR_DMW0_PLV0   0
+// `define CSR_DMW0_0      2:1
+`define CSR_DMW0_PLV3   3
+`define CSR_DMW0_MAT    5:4
+// `define CSR_DMW0_0      24:6
+`define CSR_DMW0_PSEG   27:25
+// `define CSR_DMW0_0      28
+`define CSR_DMW0_VSEG   31:29
+
+`define CSR_DMW1_PLV0   0
+// `define CSR_DMW1_0      2:1
+`define CSR_DMW1_PLV3   3
+`define CSR_DMW1_MAT    5:4
+// `define CSR_DMW1_0      24:6
+`define CSR_DMW1_PSEG   27:25
+// `define CSR_DMW1_0      28
+`define CSR_DMW1_VSEG   31:29
 
 
 `define preIF_INIT 2'b01

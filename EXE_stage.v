@@ -40,7 +40,17 @@ module EXE_stage(
     output wire [18:0] invtlb_vppn,
     output wire [ 4:0] invtlb_op,
     input  wire        MEM_to_EXE_block_tlbsrch,
-    input  wire        WB_to_EXE_block_tlbsrch
+    input  wire        WB_to_EXE_block_tlbsrch,
+
+    output wire [31:0] mem_vaddr,
+    input  wire [31:0] mem_paddr,
+    output wire        mem_wr,
+    input  wire        to_EXE_ex_ade,
+    input  wire        to_EXE_ex_tlbr,
+    input  wire        to_EXE_ex_pil,
+    input  wire        to_EXE_ex_pis,
+    input  wire        to_EXE_ex_ppi,
+    input  wire        to_EXE_ex_pme
 );
 
 
@@ -236,6 +246,11 @@ assign EXE_ready_go = (mul_div_op[3] || mul_div_op[2]) && div_dout_valid_signed
 assign EXE_RF_BUS = {{`DEST_LEN{gr_we & EXE_valid}} & dest,rfrom_mem,rfrom_mul,rfrom_cntid,exe_result,EXE_valid,csr_we,csr_num};
 
 
+// for MMU
+assign mem_vaddr = alu_result;
+assign mem_wr    = data_sram_wr;
+
+
 // data sram
 
 assign data_sram_req   = (rfrom_mem || mem_en) && EXE_valid && MEM_allowin && resetn &&
@@ -252,7 +267,7 @@ assign mask = {
 assign data_sram_wstrb = {4{store_load_op[`ST_W]}} & 4'b1111
                        | {4{store_load_op[`ST_H]}} & {{2{mask[2]}}, {2{mask[0]}}}
                        | {4{store_load_op[`ST_B]}} & mask;
-assign data_sram_addr  = alu_result;// {alu_result[31:2], 2'b0};
+assign data_sram_addr  = mem_paddr;
 assign data_sram_wdata = {32{store_load_op[`ST_B]}} & {4{mem_sum[ 7:0]}} 
                        | {32{store_load_op[`ST_H]}} & {2{mem_sum[15:0]}}
                        | {32{store_load_op[`ST_W]}} & mem_sum[31:0];
@@ -267,18 +282,37 @@ wire ex_ale;
 assign ex_ale = (store_load_op[`ST_W] || store_load_op[`LD_W])                          && alu_result[1:0]!=2'b00
              || (store_load_op[`ST_H] || store_load_op[`LD_H] || store_load_op[`LD_HU]) && alu_result[0]!=1'b0;
 
-assign exe_ex_out       = exe_ex_in || ex_ale;
-assign exe_ex_code_out  = exe_ex_in ? exe_ex_code_in : 
-                          {15{ex_ale}} & {9'b0, `ECODE_ALE};
+wire ex_adem;
+wire ex_tlbr;
+wire ex_pil;
+wire ex_pis;
+wire ex_ppi;
+wire ex_pme;
+assign ex_adem  = to_EXE_ex_ade  && (rfrom_mem || mem_en) && EXE_valid && resetn;
+assign ex_tlbr  = to_EXE_ex_tlbr && (rfrom_mem || mem_en) && EXE_valid && resetn; 
+assign ex_pil   = to_EXE_ex_pil  && (rfrom_mem || mem_en) && EXE_valid && resetn;
+assign ex_pis   = to_EXE_ex_pis  && (rfrom_mem || mem_en) && EXE_valid && resetn;
+assign ex_ppi   = to_EXE_ex_ppi  && (rfrom_mem || mem_en) && EXE_valid && resetn;
+assign ex_pme   = to_EXE_ex_pme  && (rfrom_mem || mem_en) && EXE_valid && resetn;
+
+assign exe_ex_out       = exe_ex_in || ex_ale || ex_adem || ex_tlbr || ex_pil || ex_pis || ex_ppi || ex_pme;
+assign exe_ex_code_out  = exe_ex_in ? exe_ex_code_in
+                        : {15{ ex_adem}}                        & {`ESUBCODE_ADEM, `ECODE_ADE}
+                        | {15{!ex_adem &&  ex_ale}}             & {9'b0, `ECODE_ALE}
+                        | {15{!ex_adem && !ex_ale && ex_tlbr}}  & {9'b0, `ECODE_TLBR}
+                        | {15{!ex_adem && !ex_ale && ex_pil}}   & {9'b0, `ECODE_PIL}
+                        | {15{!ex_adem && !ex_ale && ex_pis}}   & {9'b0, `ECODE_PIS}
+                        | {15{!ex_adem && !ex_ale && ex_ppi}}   & {9'b0, `ECODE_PPI}
+                        | {15{!ex_adem && !ex_ale && ex_pme}}   & {9'b0, `ECODE_PME};
 assign exe_ex_vaddr_out = exe_ex_in ? exe_ex_vaddr_in :
-                          {32{ex_ale}} & alu_result;
+                          {32{ex_ale || ex_adem || ex_tlbr || ex_pil || ex_pis || ex_ppi || ex_pme}} & alu_result;
 
 assign exe_refetch_out  = exe_refetch_in;
 
 
 // tlb
 assign tlb_inst_op_to_csr = {
-    5{EXE_valid && MEM_allowin && resetn && !(exe_ex_out || mem_ex || mem_ertn || wb_ex || ertn_flush || wb_refetch || mem_refetch)}
+    5{EXE_valid && MEM_allowin && resetn && !(exe_ex_in || mem_ex || mem_ertn || wb_ex || ertn_flush || wb_refetch || mem_refetch)}
 } & tlb_inst_op & (`TLB_INST_TLBSRCH_MASK | `TLB_INST_INVTLB_MASK);
 
 

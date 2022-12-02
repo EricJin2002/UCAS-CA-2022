@@ -70,13 +70,12 @@ always @(*) begin
     end
 end
 
-wire [31:0] preif_pc_r;
 wire [31:0] nextpc;
 wire        if_ex_in;
 wire [14:0] if_ex_code_in;
 wire [31:0] if_ex_vaddr_in;
 wire        if_refetch_in;
-assign {preif_pc_r,nextpc,if_ex_in,if_ex_code_in,if_ex_vaddr_in,if_refetch_in} = preIF_to_IF_BUS;
+assign {nextpc,if_ex_in,if_ex_code_in,if_ex_vaddr_in,if_refetch_in} = preIF_to_IF_BUS;
 
 
 // IF to ID

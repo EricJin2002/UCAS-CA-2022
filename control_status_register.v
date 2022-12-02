@@ -29,7 +29,26 @@ module control_status_register(
     input  wire [ 4: 0] tlb_inst_op,
     input  wire [ 9: 0] invtlb_asid,
     input  wire [18: 0] invtlb_vppn,
-    input  wire [ 4: 0] invtlb_op
+    input  wire [ 4: 0] invtlb_op,
+
+    // to PreIF
+    input  wire [31: 0] next_pc_vaddr,
+    output wire [31: 0] next_pc_paddr,
+    output wire         to_PreIF_ex_ade,
+    output wire         to_PreIF_ex_tlbr,
+    output wire         to_PreIF_ex_pif,
+    output wire         to_PreIF_ex_ppi,
+
+    // to EXE
+    input  wire [31: 0] mem_vaddr,
+    output wire [31: 0] mem_paddr,
+    input  wire         mem_wr,
+    output wire         to_EXE_ex_ade,
+    output wire         to_EXE_ex_tlbr,
+    output wire         to_EXE_ex_pil, // load
+    output wire         to_EXE_ex_pis, // store
+    output wire         to_EXE_ex_ppi,
+    output wire         to_EXE_ex_pme
 );
 
 wire reset;
@@ -120,6 +139,19 @@ wire [ 7:0] csr_asid_asidbits;
 
 reg  [25:0] csr_tlbrentry_pa;
 
+reg         csr_dmw0_plv0;
+reg         csr_dmw0_plv3;
+reg  [ 1:0] csr_dmw0_mat;
+reg  [ 2:0] csr_dmw0_pseg;
+reg  [ 2:0] csr_dmw0_vseg;
+
+reg         csr_dmw1_plv0;
+reg         csr_dmw1_plv3;
+reg  [ 1:0] csr_dmw1_mat;
+reg  [ 2:0] csr_dmw1_pseg;
+reg  [ 2:0] csr_dmw1_vseg;
+
+
 always @(posedge clk) begin
     if (reset) begin
         csr_crmd_plv <= 2'b0;
@@ -151,6 +183,16 @@ always @(posedge clk) begin
                       | ~csr_wmask[`CSR_CRMD_PG] & csr_crmd_pg;
         csr_crmd_da   <= csr_wmask[`CSR_CRMD_DA] & csr_wvalue[`CSR_CRMD_DA]
                       | ~csr_wmask[`CSR_CRMD_DA] & csr_crmd_da;
+    end else if (wb_ex && wb_ecode==`ECODE_TLBR) begin
+        csr_crmd_datm <= csr_crmd_datm;
+        csr_crmd_datf <= csr_crmd_datf;
+        csr_crmd_pg   <= 1'b0;
+        csr_crmd_da   <= 1'b1;
+    end else if (ertn_flush && csr_estat_ecode==6'h3f) begin
+        csr_crmd_datm <= csr_crmd_datm;
+        csr_crmd_datf <= csr_crmd_datf;
+        csr_crmd_pg   <= 1'b1;
+        csr_crmd_da   <= 1'b0;
     end
 end
 
@@ -242,7 +284,9 @@ always @(posedge clk) begin
     end
 end
 
-assign wb_ex_addr_err = wb_ecode==`ECODE_ADE || wb_ecode==`ECODE_ALE;
+assign wb_ex_addr_err = wb_ecode==`ECODE_ADE || wb_ecode==`ECODE_ALE
+                     || wb_ecode==`ECODE_TLBR || wb_ecode==`ECODE_PIF || wb_ecode==`ECODE_PIL || wb_ecode==`ECODE_PIS
+                     || wb_ecode==`ECODE_PPI || wb_ecode==`ECODE_PME;
 always @(posedge clk) begin
     if (wb_ex && wb_ex_addr_err) begin
         csr_badv_vaddr <= (wb_ecode==`ECODE_ADE && wb_esubcode==`ESUBCODE_ADEF) ? wb_pc : wb_vaddr;
@@ -432,6 +476,92 @@ end
 assign we = tlb_inst_op[`TLB_INST_TLBWR] || tlb_inst_op[`TLB_INST_TLBFILL];
 assign invtlb_valid = tlb_inst_op[`TLB_INST_INVTLB];
 
+
+// for preIF
+wire next_pc_is_DA_mode;
+wire next_pc_is_PG_DMW_mode;
+wire next_pc_is_PG_TLB_mode;
+wire next_pc_in_DMW0;
+wire next_pc_in_DMW1;
+assign next_pc_is_DA_mode       =  csr_crmd_da && ~csr_crmd_pg;
+assign next_pc_is_PG_DMW_mode   = ~csr_crmd_da &&  csr_crmd_pg && (next_pc_in_DMW0 || next_pc_in_DMW1);
+assign next_pc_is_PG_TLB_mode   = ~csr_crmd_da &&  csr_crmd_pg && ~next_pc_in_DMW0 && ~next_pc_in_DMW1;
+assign next_pc_in_DMW0          = next_pc_vaddr[31:29]==csr_dmw0_vseg && (
+    csr_dmw0_plv0 && csr_crmd_plv==2'b0 || csr_dmw0_plv3 && csr_crmd_plv==2'b11
+);
+assign next_pc_in_DMW1          = next_pc_vaddr[31:29]==csr_dmw1_vseg && (
+    csr_dmw1_plv0 && csr_crmd_plv==2'b0 || csr_dmw1_plv3 && csr_crmd_plv==2'b11
+);
+
+assign s0_vppn      = next_pc_vaddr[31:13];
+assign s0_va_bit12  = next_pc_vaddr[12];
+assign s0_asid      = csr_asid_asid;
+
+assign to_PreIF_ex_ade  = next_pc_vaddr[31] && next_pc_is_PG_TLB_mode; // || next_pc_is_PG_DMW_mode && (next_pc_in_DMW0 ? csr_dmw0_pseg[2] : csr_dmw1_pseg[2]);
+assign to_PreIF_ex_tlbr = next_pc_is_PG_TLB_mode && ~s0_found;
+assign to_PreIF_ex_pif  = next_pc_is_PG_TLB_mode &&  s0_found && ~s0_v;
+assign to_PreIF_ex_ppi  = next_pc_is_PG_TLB_mode &&  s0_found &&  s0_v && (
+    $unsigned(csr_crmd_plv) > $unsigned(s0_plv)
+);
+
+assign next_pc_paddr = wb_ex && wb_ecode==`ECODE_TLBR ? next_pc_vaddr   // due to the delayed write of CSR.CRMD.DA & CSR.CRMD.PG when TLBR
+                     : {32{next_pc_is_DA_mode}}     & next_pc_vaddr
+                     | {32{next_pc_is_PG_DMW_mode}} & {
+                        next_pc_in_DMW0 ? csr_dmw0_pseg : csr_dmw1_pseg, 
+                        next_pc_vaddr[28:0]}
+                     | {32{next_pc_is_PG_TLB_mode}} & {
+                        s0_ppn[19:10],
+                        s0_ps==22 ? next_pc_vaddr[21:12] : s0_ppn[9:0],
+                        next_pc_vaddr[11:0]
+                    };
+
+
+// for EXE
+wire mem_addr_is_DA_mode;
+wire mem_addr_is_PG_DMW_mode;
+wire mem_addr_is_PG_TLB_mode;
+wire mem_addr_in_DMW0;
+wire mem_addr_in_DMW1;
+assign mem_addr_is_DA_mode       =  csr_crmd_da && ~csr_crmd_pg;
+assign mem_addr_is_PG_DMW_mode   = ~csr_crmd_da &&  csr_crmd_pg && (mem_addr_in_DMW0 || mem_addr_in_DMW1);
+assign mem_addr_is_PG_TLB_mode   = ~csr_crmd_da &&  csr_crmd_pg && ~mem_addr_in_DMW0 && ~mem_addr_in_DMW1;
+assign mem_addr_in_DMW0          = mem_vaddr[31:29]==csr_dmw0_vseg && (
+    csr_dmw0_plv0 && csr_crmd_plv==2'b0 || csr_dmw0_plv3 && csr_crmd_plv==2'b11
+);
+assign mem_addr_in_DMW1          = mem_vaddr[31:29]==csr_dmw1_vseg && (
+    csr_dmw1_plv0 && csr_crmd_plv==2'b0 || csr_dmw1_plv3 && csr_crmd_plv==2'b11
+);
+
+assign s1_vppn = {19{tlb_inst_op[`TLB_INST_TLBSRCH]}}                                       & csr_tlbehi_vppn
+               | {19{tlb_inst_op[`TLB_INST_INVTLB]}}                                        & invtlb_vppn
+               | {19{!tlb_inst_op[`TLB_INST_TLBSRCH] && !tlb_inst_op[`TLB_INST_INVTLB]}}    & mem_vaddr[31:13];
+assign s1_va_bit12 = !tlb_inst_op[`TLB_INST_TLBSRCH] && !tlb_inst_op[`TLB_INST_INVTLB] && mem_vaddr[12];
+assign s1_asid = {10{tlb_inst_op[`TLB_INST_TLBSRCH]}}                                       & csr_asid_asid
+               | {10{tlb_inst_op[`TLB_INST_INVTLB]}}                                        & invtlb_asid
+               | {10{!tlb_inst_op[`TLB_INST_TLBSRCH] && !tlb_inst_op[`TLB_INST_INVTLB]}}    & csr_asid_asid;
+
+assign to_EXE_ex_ade  = mem_vaddr[31] && mem_addr_is_PG_TLB_mode; // || mem_addr_is_PG_DMW_mode && (mem_addr_in_DMW0 ? csr_dmw0_pseg[2] : csr_dmw1_pseg[2]);
+assign to_EXE_ex_tlbr = mem_addr_is_PG_TLB_mode && ~s1_found;
+assign to_EXE_ex_pil  = mem_addr_is_PG_TLB_mode &&  s1_found && ~s1_v && ~mem_wr;
+assign to_EXE_ex_pis  = mem_addr_is_PG_TLB_mode &&  s1_found && ~s1_v &&  mem_wr;
+assign to_EXE_ex_ppi  = mem_addr_is_PG_TLB_mode &&  s1_found &&  s1_v && (
+    $unsigned(csr_crmd_plv) > $unsigned(s1_plv)
+);
+assign to_EXE_ex_pme  = mem_addr_is_PG_TLB_mode &&  s1_found &&  s1_v && !(
+    $unsigned(csr_crmd_plv) > $unsigned(s1_plv)
+) && mem_wr && ~s1_d;
+
+assign mem_paddr = {32{mem_addr_is_DA_mode}}     & mem_vaddr
+                 | {32{mem_addr_is_PG_DMW_mode}} & {
+                    mem_addr_in_DMW0 ? csr_dmw0_pseg : csr_dmw1_pseg, 
+                    mem_vaddr[28:0]}
+                 | {32{mem_addr_is_PG_TLB_mode}} & {
+                    s1_ppn[19:10],
+                    s1_ps==22 ? mem_vaddr[21:12] : s1_ppn[9:0],
+                    mem_vaddr[11:0]
+                };
+
+
 assign r_index = csr_tlbidx_index;
 assign w_index = {4{tlb_inst_op[`TLB_INST_TLBWR]}} & csr_tlbidx_index
                | {4{tlb_inst_op[`TLB_INST_TLBFILL]}} & rand_index;
@@ -472,8 +602,6 @@ always @(posedge clk) begin
     end
 end
 
-assign s1_vppn = {19{tlb_inst_op[`TLB_INST_TLBSRCH]}} & csr_tlbehi_vppn
-               | {19{tlb_inst_op[`TLB_INST_INVTLB]}} & invtlb_vppn;
 assign w_vppn = csr_tlbehi_vppn;
 always @(posedge clk) begin
     if (reset) begin
@@ -481,16 +609,17 @@ always @(posedge clk) begin
     end else if (csr_we && csr_wnum==`CSR_TLBEHI) begin
         csr_tlbehi_vppn <= csr_wmask[`CSR_TLBEHI_VPPN] & csr_wvalue[`CSR_TLBEHI_VPPN]
                         | ~csr_wmask[`CSR_TLBEHI_VPPN] & csr_tlbehi_vppn;
+    end else if (wb_ex && (
+        wb_ecode==`ECODE_TLBR || wb_ecode==`ECODE_PIF || wb_ecode==`ECODE_PIL || wb_ecode==`ECODE_PIS
+        || wb_ecode==`ECODE_PPI || wb_ecode==`ECODE_PME
+    )) begin
+        csr_tlbehi_vppn <= wb_vaddr[31:13];
     end else if (tlb_inst_op[`TLB_INST_TLBRD]) begin
         if (r_e) begin
             csr_tlbehi_vppn <= r_vppn;
         end else begin
             csr_tlbehi_vppn <= 0;
         end
-
-    // todo
-    // end else if (wb_ex && wb_ecode==) begin
-        // csr_tlbehi_vppn <= wb_pc[31:13];
     end
 end
 
@@ -584,9 +713,6 @@ always @(posedge clk) begin
 end
 
 assign w_asid = csr_asid_asid;
-assign s0_asid = csr_asid_asid;
-assign s1_asid = {10{tlb_inst_op[`TLB_INST_TLBSRCH]}} & csr_asid_asid
-               | {10{tlb_inst_op[`TLB_INST_INVTLB]}} & invtlb_asid;
 assign csr_asid_asidbits = 10;
 always @(posedge clk) begin
     if (reset) begin
@@ -612,6 +738,49 @@ always @(posedge clk) begin
     end
 end
 
+always @(posedge clk) begin
+    if (reset) begin
+        csr_dmw0_plv0 <= 0;
+        csr_dmw0_plv3 <= 0;
+        csr_dmw0_mat <= 0;
+        csr_dmw0_pseg <= 0;
+        csr_dmw0_vseg <= 0;
+    end else if (csr_we && csr_wnum==`CSR_DMW0) begin
+        csr_dmw0_plv0 <= csr_wmask[`CSR_DMW0_PLV0] & csr_wvalue[`CSR_DMW0_PLV0]
+                      | ~csr_wmask[`CSR_DMW0_PLV0] & csr_dmw0_plv0;
+        csr_dmw0_plv3 <= csr_wmask[`CSR_DMW0_PLV3] & csr_wvalue[`CSR_DMW0_PLV3]
+                      | ~csr_wmask[`CSR_DMW0_PLV3] & csr_dmw0_plv3;
+        csr_dmw0_mat <= csr_wmask[`CSR_DMW0_MAT] & csr_wvalue[`CSR_DMW0_MAT]
+                     | ~csr_wmask[`CSR_DMW0_MAT] & csr_dmw0_mat;
+        csr_dmw0_pseg <= csr_wmask[`CSR_DMW0_PSEG] & csr_wvalue[`CSR_DMW0_PSEG]
+                      | ~csr_wmask[`CSR_DMW0_PSEG] & csr_dmw0_pseg;
+        csr_dmw0_vseg <= csr_wmask[`CSR_DMW0_VSEG] & csr_wvalue[`CSR_DMW0_VSEG]
+                      | ~csr_wmask[`CSR_DMW0_VSEG] & csr_dmw0_vseg;
+    end
+end
+
+always @(posedge clk) begin
+    if (reset) begin
+        csr_dmw1_plv0 <= 0;
+        csr_dmw1_plv3 <= 0;
+        csr_dmw1_mat <= 0;
+        csr_dmw1_pseg <= 0;
+        csr_dmw1_vseg <= 0;
+    end else if (csr_we && csr_wnum==`CSR_DMW1) begin
+        csr_dmw1_plv0 <= csr_wmask[`CSR_DMW1_PLV0] & csr_wvalue[`CSR_DMW1_PLV0]
+                      | ~csr_wmask[`CSR_DMW1_PLV0] & csr_dmw1_plv0;
+        csr_dmw1_plv3 <= csr_wmask[`CSR_DMW1_PLV3] & csr_wvalue[`CSR_DMW1_PLV3]
+                      | ~csr_wmask[`CSR_DMW1_PLV3] & csr_dmw1_plv3;
+        csr_dmw1_mat <= csr_wmask[`CSR_DMW1_MAT] & csr_wvalue[`CSR_DMW1_MAT]
+                      | ~csr_wmask[`CSR_DMW1_MAT] & csr_dmw1_mat;
+        csr_dmw1_pseg <= csr_wmask[`CSR_DMW1_PSEG] & csr_wvalue[`CSR_DMW1_PSEG]
+                      | ~csr_wmask[`CSR_DMW1_PSEG] & csr_dmw1_pseg;
+        csr_dmw1_vseg <= csr_wmask[`CSR_DMW1_VSEG] & csr_wvalue[`CSR_DMW1_VSEG]
+                      | ~csr_wmask[`CSR_DMW1_VSEG] & csr_dmw1_vseg;
+    end
+end
+
+
 // csr read
 assign csr_rvalue = {32{csr_rnum==`CSR_CRMD}}       & {23'b0, csr_crmd_datm, csr_crmd_datf, csr_crmd_pg, csr_crmd_da, csr_crmd_ie, csr_crmd_plv}
                   | {32{csr_rnum==`CSR_PRMD}}       & {29'b0, csr_prmd_pie, csr_prmd_pplv}
@@ -633,11 +802,13 @@ assign csr_rvalue = {32{csr_rnum==`CSR_CRMD}}       & {23'b0, csr_crmd_datm, csr
                   | {32{csr_rnum==`CSR_TLBELO0}}    & {4'b0, csr_tlbelo0_ppn, 1'b0, csr_tlbelo0_g, csr_tlbelo0_mat, csr_tlbelo0_plv, csr_tlbelo0_d, csr_tlbelo0_v}
                   | {32{csr_rnum==`CSR_TLBELO1}}    & {4'b0, csr_tlbelo1_ppn, 1'b0, csr_tlbelo1_g, csr_tlbelo1_mat, csr_tlbelo1_plv, csr_tlbelo1_d, csr_tlbelo1_v}
                   | {32{csr_rnum==`CSR_ASID}}       & {8'b0, csr_asid_asidbits, 6'b0, csr_asid_asid}
-                  | {32{csr_rnum==`CSR_TLBRENTRY}}  & {csr_tlbrentry_pa, 6'b0};
+                  | {32{csr_rnum==`CSR_TLBRENTRY}}  & {csr_tlbrentry_pa, 6'b0}
+                  | {32{csr_rnum==`CSR_DMW0}}       & {csr_dmw0_vseg, 1'b0, csr_dmw0_pseg, 19'b0, csr_dmw0_mat, csr_dmw0_plv3, 2'b0, csr_dmw0_plv0}
+                  | {32{csr_rnum==`CSR_DMW1}}       & {csr_dmw1_vseg, 1'b0, csr_dmw1_pseg, 19'b0, csr_dmw1_mat, csr_dmw1_plv3, 2'b0, csr_dmw1_plv0};
 
 
 // exception
-assign ex_entry = {csr_eentry_va, 6'b0};
+assign ex_entry = wb_ecode==`ECODE_TLBR ? {csr_tlbrentry_pa, 6'b0} : {csr_eentry_va, 6'b0};
 assign ex_ra    = csr_era_pc;
 assign has_int  = ((csr_estat_is[11:0] & csr_ecfg_lie[11:0]) != 12'b0) && (csr_crmd_ie==1'b1);
 
